@@ -1,40 +1,38 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>AlturaTime — Viewer</title>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=Lato:wght@400;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script src="https://unpkg.com/ical.js@1.4.0/build/ical.min.js"></script>
-<style>
-  :root{--accent:#2a9078;--muted:#6b7280;--bg:#f6fbfa;--card:#fff;--danger:#d62828}
-  html,body{height:100%;margin:0;font-family:Lato,Inter,system-ui; background:var(--bg); color:#0f172a}
-  .wrap{max-width:980px;margin:0 auto;padding:28px}
-  .brand{font-family:Nunito,Inter;font-size:28px;color:var(--accent);font-weight:900;text-align:center}
-  .lead{color:var(--muted);text-align:center;margin-top:6px}
-  .card{background:var(--card);border-radius:12px;padding:18px;margin-top:18px;box-shadow:0 10px 30px rgba(15,23,42,0.06)}
-  .topRow{display:flex;align-items:center;gap:16px;justify-content:space-between;flex-wrap:wrap}
-  .tz{font-weight:600;color:#ef7b68}
-  .timeLarge{font-size:2.4rem;color:var(--accent);font-weight:800}
-  .status{padding:8px 12px;border-radius:8px;font-weight:700;display:inline-block}
-  .status.safe{background:#5fb878;color:#fff}
-  .status.avoid{background:var(--danger);color:#fff}
-  .status.maybe{background:#ffd166;color:#333}
-  .controls{display:flex;gap:8px;align-items:center}
-  .btn{background:transparent;border:1px solid #e6eef0;padding:8px 10px;border-radius:8px;cursor:pointer}
-  .muted{color:var(--muted)}
-  .list{margin-top:14px;text-align:left}
-  .event{padding:10px;border-radius:8px;border:1px solid #f1f5f6;margin-bottom:8px}
-  .small{font-size:0.95rem;color:var(--muted)}
-  .meta{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-  @media (prefers-color-scheme:dark){ body{background:#021712;color:#e6fff6} .card{background:#042018} }
-</style>
+  <meta charset="utf-8" />
+  <title>AlturaTime — Viewer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=Lato:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/ical.js@1.4.0/build/ical.min.js"></script>
+  <style>
+    :root{--accent:#2a9078;--muted:#6b7280;--bg:#f6fbfa;--card:#fff;--danger:#d62828}
+    html,body{height:100%;margin:0;font-family:Lato,Inter,system-ui;background:var(--bg);color:#0f172a}
+    .wrap{max-width:980px;margin:0 auto;padding:28px}
+    .brand{font-family:Nunito,Inter;font-size:28px;color:var(--accent);font-weight:900;text-align:center}
+    .lead{color:var(--muted);text-align:center;margin-top:6px}
+    .card{background:var(--card);border-radius:12px;padding:18px;margin-top:18px;box-shadow:0 10px 30px rgba(15,23,42,0.06)}
+    .topRow{display:flex;align-items:center;gap:16px;justify-content:space-between;flex-wrap:wrap}
+    .tz{font-weight:600;color:#ef7b68}
+    .timeLarge{font-size:2.4rem;color:var(--accent);font-weight:800}
+    .status{padding:8px 12px;border-radius:8px;font-weight:700;display:inline-block}
+    .status.safe{background:#5fb878;color:#fff}
+    .status.avoid{background:var(--danger);color:#fff}
+    .status.maybe{background:#ffd166;color:#333}
+    .controls{display:flex;gap:8px;align-items:center}
+    .btn{background:transparent;border:1px solid #e6eef0;padding:8px 10px;border-radius:8px;cursor:pointer}
+    .muted{color:var(--muted)}
+    .list{margin-top:14px;text-align:left}
+    .event{padding:10px;border-radius:8px;border:1px solid #f1f5f6;margin-bottom:8px}
+    .small{font-size:0.95rem;color:var(--muted)}
+  </style>
 </head>
 <body>
   <div class="wrap">
     <div class="brand">AlturaTime</div>
-    <div class="lead">Quick availability — know when to call with confidence.</div>
+    <div class="lead">Know when to call — clear availability at a glance.</div>
 
     <div class="card" role="region" aria-labelledby="status-heading">
       <div class="topRow">
@@ -49,15 +47,13 @@
         </div>
       </div>
 
-      <div class="meta" style="margin-top:12px">
-        <div class="small" id="nextInfo">Next class in —</div>
-        <div style="flex:1"></div>
-        <div class="controls">
-          <button class="btn" id="copyLinkBtn">Copy link</button>
-          <button class="btn" id="qrBtn">QR</button>
-          <button class="btn" id="printBtn">Print</button>
-          <button class="btn" id="downloadBtn">Download .ics</button>
-        </div>
+      <div style="margin-top:12px" class="small" id="nextInfo">Next class —</div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+        <button class="btn" id="copyLinkBtn">Copy link</button>
+        <button class="btn" id="qrBtn">QR</button>
+        <button class="btn" id="printBtn">Print</button>
+        <button class="btn" id="downloadBtn">Download .ics</button>
       </div>
 
       <div class="list" id="todayList" aria-live="polite" style="margin-top:12px"></div>
@@ -65,147 +61,154 @@
   </div>
 
 <script>
-/* CONFIG - fill these with your Supabase values */
-const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  // CONFIG - set your Supabase values
+  const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
+  const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const params = new URLSearchParams(location.search);
-const id = params.get('id');
-const name = decodeURIComponent(params.get('name') || 'Student');
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  const name = decodeURIComponent(params.get('name') || 'Student');
 
-const nameTitle = document.getElementById('nameTitle');
-const tzLabel = document.getElementById('tzLabel');
-const timeDisplay = document.getElementById('timeDisplay');
-const statusBadge = document.getElementById('statusBadge');
-const nextInfo = document.getElementById('nextInfo');
-const todayList = document.getElementById('todayList');
+  const nameTitle = document.getElementById('nameTitle');
+  const tzLabel = document.getElementById('tzLabel');
+  const timeDisplay = document.getElementById('timeDisplay');
+  const statusBadge = document.getElementById('statusBadge');
+  const nextInfo = document.getElementById('nextInfo');
+  const todayList = document.getElementById('todayList');
 
-if (!id) {
-  nameTitle.textContent = 'Missing schedule ID';
-  throw new Error('Missing schedule id in URL');
-}
-nameTitle.textContent = `${name}'s Schedule`;
+  if (!id) { nameTitle.textContent = 'Missing schedule ID'; throw new Error('Missing schedule id'); }
+  nameTitle.textContent = `${name}'s Schedule`;
 
-async function loadAndRender() {
-  // get public url for the ICS file
-  const { data } = supabase.storage.from('schedules').getPublicUrl(`${id}.ics`);
-  if (!data?.publicUrl) {
-    nameTitle.textContent = 'Schedule not found';
-    return;
+  let occurrences = [];
+  let scheduleTz = 'UTC';
+
+  function formatTimeInTZ(date, tz) {
+    return date.toLocaleString('en-US', { timeZone: tz, hour:'numeric', minute:'2-digit', hour12:true });
   }
 
-  const res = await fetch(data.publicUrl);
-  if (!res.ok) { nameTitle.textContent = 'Failed to fetch schedule'; return; }
-  const icsText = await res.text();
+  async function fetchAndBuild() {
+    const { data } = supabase.storage.from('schedules').getPublicUrl(`${id}.ics`);
+    if (!data?.publicUrl) { nameTitle.textContent = 'Schedule not found'; return; }
 
-  // parse calendar and expand occurrences
-  const jcal = ICAL.parse(icsText);
-  const comp = new ICAL.Component(jcal);
+    const res = await fetch(data.publicUrl);
+    if (!res.ok) { nameTitle.textContent = 'Failed to fetch schedule'; return; }
+    const txt = await res.text();
+    const clean = txt.replace(/^\uFEFF/, '');
+    const jcal = ICAL.parse(clean);
+    const comp = new ICAL.Component(jcal);
 
-  // timezone detection
-  let tz = comp.getFirstPropertyValue?.('x-wr-timezone') || (comp.getFirstSubcomponent('vtimezone')?.getFirstPropertyValue('tzid')) || 'UTC';
-  tzLabel.textContent = tz;
+    // timezone detection
+    scheduleTz = comp.getFirstPropertyValue?.('x-wr-timezone') || (comp.getFirstSubcomponent('vtimezone')?.getFirstPropertyValue('tzid')) || 'UTC';
+    tzLabel.textContent = scheduleTz;
 
-  // build occurrences in a window
-  const now = new Date();
-  const windowStart = new Date(now.getTime() - 24*60*60*1000);
-  const windowEnd = new Date(now.getTime() + 14*24*60*60*1000);
+    // build occurrences (window)
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - 24*60*60*1000);
+    const windowEnd = new Date(now.getTime() + 14*24*60*60*1000);
 
-  const vevents = comp.getAllSubcomponents('vevent') || [];
-  const occurrences = [];
+    const vevents = comp.getAllSubcomponents('vevent') || [];
+    occurrences = [];
 
-  for (const v of vevents) {
-    try {
-      const ev = new ICAL.Event(v);
-      const dur = ev.endDate ? (ev.endDate.toJSDate().getTime() - ev.startDate.toJSDate().getTime()) : 0;
-
-      const hasRrule = v.getFirstProperty('rrule') != null;
-      if (hasRrule || v.getFirstProperty('rdate')) {
-        const exp = new ICAL.RecurExpansion({component:v, dtstart: ev.startDate});
-        let next;
-        while ((next = exp.next())) {
-          const s = next.toJSDate();
-          if (s > windowEnd) break;
-          if (s >= windowStart) {
-            occurrences.push({start:s, end:new Date(s.getTime()+dur), summary: ev.summary});
+    for (const v of vevents) {
+      try {
+        const ev = new ICAL.Event(v);
+        const dur = ev.endDate ? (ev.endDate.toJSDate().getTime() - ev.startDate.toJSDate().getTime()) : 0;
+        const hasRrule = v.getFirstProperty('rrule') != null;
+        if (hasRrule || v.getFirstProperty('rdate')) {
+          const exp = new ICAL.RecurExpansion({component:v, dtstart: ev.startDate});
+          let next;
+          while ((next = exp.next())) {
+            const s = next.toJSDate();
+            if (s > windowEnd) break;
+            if (s >= windowStart) occurrences.push({start:s, end:new Date(s.getTime()+dur), summary:ev.summary});
           }
+        } else {
+          const s = ev.startDate.toJSDate();
+          const e = ev.endDate ? ev.endDate.toJSDate() : new Date(s.getTime()+dur);
+          if (e >= windowStart && s <= windowEnd) occurrences.push({start:s, end:e, summary:ev.summary});
         }
-      } else {
-        const s = ev.startDate.toJSDate();
-        const e = ev.endDate ? ev.endDate.toJSDate() : new Date(s.getTime()+dur);
-        if (e >= windowStart && s <= windowEnd) occurrences.push({start:s,end:e,summary:ev.summary});
-      }
-    } catch (err) { console.warn('evt parse', err) }
+      } catch (err) { console.warn('evt parse', err); }
+    }
+
+    occurrences.sort((a,b) => a.start - b.start);
+
+    // initial render
+    updateStatusAndUI();
+
+    // keep time shown updated and status recalculated
+    setInterval(()=> {
+      timeDisplay.textContent = new Date().toLocaleString('en-US', {timeZone: scheduleTz, hour:'numeric', minute:'2-digit', hour12:true});
+    }, 15000);
+    setInterval(updateStatusAndUI, 30000); // re-evaluate every 30s
   }
 
-  occurrences.sort((a,b)=>a.start-b.start);
+  function updateStatusAndUI() {
+    const nowMs = Date.now();
+    const inClass = occurrences.find(o => nowMs >= o.start.getTime() && nowMs <= o.end.getTime());
+    const future = occurrences.filter(o => o.start.getTime() > nowMs);
+    const next = future.length ? future[0] : null;
 
-  // compute status
-  const nowMs = Date.now();
-  const inClass = occurrences.find(o => nowMs >= o.start.getTime() && nowMs <= o.end.getTime());
-  const future = occurrences.filter(o => o.start.getTime() > nowMs);
-  const next = future.length? future[0] : null;
+    // time display (in schedule tz)
+    timeDisplay.textContent = new Date().toLocaleString('en-US', {timeZone: scheduleTz, hour:'numeric', minute:'2-digit', hour12:true});
 
-  // show time in schedule tz
-  timeDisplay.textContent = new Date().toLocaleString('en-US', {timeZone: tz, hour:'numeric', minute:'2-digit', hour12:true});
+    const hourInTz = parseInt(new Date().toLocaleString('en-US', {timeZone: scheduleTz, hour:'2-digit', hour12:false}));
+    const isNight = (hourInTz < 7) || (hourInTz >= 21);
 
-  // night-time detection using schedule timezone local hour
-  const hourInTz = parseInt(new Date().toLocaleString('en-US', {timeZone: tz, hour:'2-digit', hour12:false}));
-  const isNight = (hourInTz < 7) || (hourInTz >= 21);
+    if (inClass) {
+      statusBadge.className = 'status avoid';
+      statusBadge.textContent = 'DO NOT CALL — CLASS IN PROGRESS';
+      const mins = Math.max(0, Math.round((inClass.end.getTime() - nowMs) / 60000));
+      nextInfo.textContent = `${inClass.summary} — ends in ${Math.floor(mins/60)>0 ? Math.floor(mins/60)+' hr ' : ''}${mins%60} min`;
+    } else if (isNight) {
+      statusBadge.className = 'status avoid';
+      statusBadge.textContent = 'DO NOT CALL — NIGHT TIME';
+      if (next) {
+        const mins = Math.round((next.start.getTime() - nowMs)/60000);
+        nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0?Math.floor(mins/60)+' hr ':''}${mins%60} min`;
+      } else nextInfo.textContent = 'No upcoming classes found.';
+    } else {
+      statusBadge.className = 'status safe';
+      statusBadge.textContent = 'GOOD TO CALL';
+      if (next) {
+        const mins = Math.round((next.start.getTime() - nowMs)/60000);
+        nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0?Math.floor(mins/60)+' hr ':''}${mins%60} min`;
+      } else nextInfo.textContent = 'No upcoming classes found.';
+    }
 
-  // set status + text and color (red for DO NOT CALL)
-  if (inClass) {
-    statusBadge.className = 'status avoid';
-    statusBadge.textContent = 'DO NOT CALL — CLASS IN PROGRESS';
-    // show which class and remaining time
-    const mins = Math.max(0, Math.round((inClass.end.getTime()-nowMs)/60000));
-    nextInfo.textContent = `${inClass.summary} — ends in ${Math.floor(mins/60)>0? Math.floor(mins/60)+' hr ':''}${mins%60} min`;
-  } else if (isNight) {
-    statusBadge.className = 'status avoid';
-    statusBadge.textContent = 'DO NOT CALL — NIGHT TIME';
-    if (next) {
-      const mins = Math.round((next.start.getTime()-nowMs)/60000);
-      nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0?Math.floor(mins/60)+' hr ':''}${mins%60} min`;
-    } else nextInfo.textContent = 'No upcoming classes found.';
-  } else {
-    statusBadge.className = 'status safe';
-    statusBadge.textContent = 'GOOD TO CALL';
-    if (next) {
-      const mins = Math.round((next.start.getTime()-nowMs)/60000);
-      nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0?Math.floor(mins/60)+' hr ':''}${mins%60} min`;
-    } else nextInfo.textContent = 'No upcoming classes found.';
+    // today's schedule (in schedule tz)
+    const localNow = new Date(new Date().toLocaleString('en-US', {timeZone: scheduleTz}));
+    const startDay = new Date(localNow); startDay.setHours(0,0,0,0);
+    const endDay = new Date(startDay.getTime() + 24*60*60*1000);
+
+    const today = occurrences.filter(o => {
+      const sLocal = new Date(o.start.toLocaleString('en-US', {timeZone: scheduleTz}));
+      return sLocal >= startDay && sLocal < endDay;
+    });
+
+    todayList.innerHTML = today.length ? today.map(ev => `
+      <div class="event" role="article">
+        <div style="font-weight:700">${ev.summary}</div>
+        <div class="small">${formatDisplay(ev.start)} — ${formatDisplay(ev.end)}</div>
+      </div>
+    `).join('') : '<div class="small">No classes today.</div>';
+
+    function formatDisplay(d) {
+      return d.toLocaleString('en-US', {timeZone: scheduleTz, hour:'numeric', minute:'2-digit', hour12:true});
+    }
   }
 
-  // build today's list (local to schedule timezone)
-  const startOfDay = new Date(new Date().toLocaleString('en-US', {timeZone: tz, hour12:false}));
-  startOfDay.setHours(0,0,0,0);
-  const endOfDay = new Date(startOfDay.getTime()+24*60*60*1000);
+  // share/download buttons wired after load
+  function wireButtons() {
+    const base = location.origin + location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
+    const link = `${base}view.html?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`;
+    document.getElementById('copyLinkBtn').onclick = ()=> navigator.clipboard.writeText(link).then(()=> alert('Link copied'));
+    document.getElementById('qrBtn').onclick = ()=> window.open(`https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=${encodeURIComponent(link)}`, '_blank');
+    document.getElementById('printBtn').onclick = ()=> window.print();
+    document.getElementById('downloadBtn').onclick = ()=> window.open(`${SUPABASE_URL}/storage/v1/object/public/schedules/${encodeURIComponent(id)}.ics`, '_blank');
+  }
 
-  const today = occurrences.filter(o => o.start >= startOfDay && o.start < endOfDay);
-  todayList.innerHTML = today.length ? today.map(ev=>`
-    <div class="event" role="article">
-      <div style="font-weight:700">${ev.summary}</div>
-      <div class="small">${ev.start.toLocaleString('en-US', {timeZone: tz, hour:'numeric', minute:'2-digit', hour12:true})}
-       — ${ev.end.toLocaleString('en-US', {timeZone: tz, hour:'numeric', minute:'2-digit', hour12:true})}</div>
-    </div>`).join('') : '<div class="small">No classes today.</div>';
-
-  // wire up sharing buttons
-  const link = `${location.origin}/view.html?id=${id}&name=${encodeURIComponent(name)}`;
-  document.getElementById('copyLinkBtn').onclick = ()=> navigator.clipboard.writeText(link).then(()=> alert('Link copied'));
-  document.getElementById('qrBtn').onclick = ()=> window.open(`https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=${encodeURIComponent(link)}`, '_blank');
-  document.getElementById('printBtn').onclick = ()=> window.print();
-  document.getElementById('downloadBtn').onclick = ()=> window.open(`${SUPABASE_URL}/storage/v1/object/public/schedules/${id}.ics`, '_blank');
-
-  // keep time updated every 15s and recalc status every 30s
-  setInterval(()=> {
-    timeDisplay.textContent = new Date().toLocaleString('en-US', {timeZone: tz, hour:'numeric', minute:'2-digit', hour12:true});
-  },15000);
-  setInterval(()=> loadAndRender(), 30000); // re-run to update status nicely
-}
-
-loadAndRender().catch(err=> { console.error(err); nameTitle.textContent='Failed to load schedule' });
-
+  fetchAndBuild().then(wireButtons).catch(err => { console.error(err); nameTitle.textContent = 'Failed to load schedule'; });
 </script>
 </body>
 </html>
