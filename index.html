@@ -1,71 +1,183 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>AlturaTime - Upload</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=Lato:wght@400;700&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <style>
-    body { font-family: 'Lato', sans-serif; background:#f8fafb; margin:0; padding:20px; color:#203040; }
-    .main-title { font-family:'Nunito',sans-serif; font-size:2.2em; color:#2a9078; font-weight:900; text-align:center; }
-    .sub-title { text-align:center; color:#4e5d6c; margin-bottom:20px; }
-    .container { max-width:900px; margin:0 auto; }
-    .card { background:white; border-radius:10px; padding:18px; box-shadow:0 6px 18px rgba(0,0,0,0.06); margin-bottom:18px; }
-    .file-label { background:#e27d60; color:white; padding:10px 16px; border-radius:8px; display:inline-block; cursor:pointer }
-    input[type="file"] { display:none; }
-    input[type="text"] { width:100%;padding:10px;border-radius:8px;border:1px solid #ddd; margin-bottom:10px }
-    button { background:#2a9078;color:#fff;padding:10px 14px;border-radius:8px;border:none;cursor:pointer }
-    .link { margin-top:12px }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AlturaTime — Upload</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --accent:#2a9078; --muted:#6b7280; --bg:#f6fbfa; --card:#ffffff; --danger:#d62828;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  body{background:linear-gradient(180deg,#f6fbfa 0%, #f0f7f6 100%);padding:28px; color:#0f172a}
+  .wrap{max-width:920px;margin:0 auto}
+  header{ text-align:center; margin-bottom:18px }
+  .title{font-weight:700;color:var(--accent);font-size:28px}
+  .subtitle{color:var(--muted);margin-top:6px}
+  .card{background:var(--card);border-radius:12px;padding:18px;margin-top:18px;box-shadow:0 8px 30px rgba(15,23,42,0.06)}
+  label.file{display:inline-block;background:#ef7b68;color:#fff;padding:10px 14px;border-radius:8px;cursor:pointer;margin-right:12px}
+  input[type="file"]{display:none}
+  input[type="text"]{width:100%;padding:12px;border-radius:8px;border:1px solid #e6eef0;font-size:15px}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  button.primary{background:var(--accent);color:#fff;border:none;padding:10px 14px;border-radius:10px;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid #e6eef0;padding:8px 12px;border-radius:10px;cursor:pointer}
+  .linkBox{margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .muted{color:var(--muted);font-size:14px}
+  .qr{width:120px;height:120px;border-radius:8px;background:#fff;padding:8px;box-shadow:0 6px 18px rgba(0,0,0,0.05)}
+  footer{margin-top:30px;text-align:center;color:var(--muted);font-size:13px}
+  @media (prefers-color-scheme:dark){ body{background:#072a22;color:#e6fff6} .card{background:#042018} }
+</style>
 </head>
 <body>
-  <div class="container">
-    <div class="main-title">AlturaTime</div>
-    <div class="sub-title">Enter a name & upload an .ics class schedule — get a shareable link.</div>
+  <div class="wrap">
+    <header>
+      <div class="title">AlturaTime</div>
+      <div class="subtitle">Upload your .ics class schedule and generate a shareable link for loved ones</div>
+    </header>
 
-    <div class="card">
-      <input type="text" id="studentName" placeholder="Student's name (e.g., Sayed Belal)" required />
-      <input type="file" id="icsFile" accept=".ics" />
-      <label for="icsFile" class="file-label">Choose .ics file</label>
-      <span id="fileName" style="margin-left:12px;color:#666;font-size:0.9em"></span>
-      <div style="margin-top:12px">
-        <button onclick="uploadFile()">Upload & Create Link</button>
+    <section class="card" aria-labelledby="upload-heading">
+      <h2 id="upload-heading" style="margin:0 0 8px 0;font-size:18px">Create your shareable schedule</h2>
+      <input id="studentName" type="text" placeholder="Student's name (e.g., Sayed Belal)" aria-label="Student name">
+
+      <div class="row" style="margin-top:8px">
+        <label class="file" for="icsFile">Choose .ics file</label>
+        <div id="fileName" class="muted">No file chosen</div>
+        <input id="icsFile" type="file" accept=".ics" aria-label="ICS file input">
       </div>
-      <div id="result" class="link"></div>
-    </div>
+
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="uploadBtn">Upload & Create Link</button>
+        <button class="ghost" id="clearLocal">Clear Local</button>
+        <div style="flex:1"></div>
+        <button class="ghost" id="toggleDark">Toggle Dark</button>
+      </div>
+
+      <div id="resultArea" class="linkBox" style="margin-top:16px"></div>
+    </section>
+
+    <section class="card" style="margin-top:18px">
+      <h3 style="margin:0 0 10px 0">Preview (local)</h3>
+      <div id="previewArea" class="muted">Upload a file to preview the class summary and status locally.</div>
+    </section>
+
+    <footer>Made with ♥ — AlturaTime</footer>
   </div>
 
-  <script>
-    const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg"; // paste anon key
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+<script>
+  // CONFIG — replace with your Supabase details
+  const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
+  const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    const icsFileInput = document.getElementById("icsFile");
-    const fileNameSpan = document.getElementById("fileName");
+  const icsFile = document.getElementById('icsFile');
+  const fileName = document.getElementById('fileName');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const resultArea = document.getElementById('resultArea');
+  const previewArea = document.getElementById('previewArea');
+  const clearLocal = document.getElementById('clearLocal');
+  const toggleDark = document.getElementById('toggleDark');
 
-    icsFileInput.addEventListener("change", e => {
-      fileNameSpan.textContent = e.target.files[0]?.name || "";
-    });
+  let parsedEvents = null;
+  let scheduleTz = null;
 
-    async function uploadFile() {
-      const name = document.getElementById("studentName").value.trim();
-      const file = icsFileInput.files[0];
-      if (!name || !file) return alert("Enter name & choose a file");
+  icsFile.addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f) { fileName.textContent = 'No file chosen'; previewArea.textContent=''; return; }
+    fileName.textContent = f.name;
 
-      const fileId = Math.random().toString(36).substring(2, 10);
-      const path = `${fileId}.ics`;
-
-      let { error } = await supabase.storage.from("schedules").upload(path, file);
-      if (error) {
-        alert("Upload failed: " + error.message);
-        return;
-      }
-
-      const link = `view.html?id=${fileId}&name=${encodeURIComponent(name)}`;
-      document.getElementById("result").innerHTML = 
-        `✅ Uploaded! Share this link: <a href="${link}" target="_blank">${link}</a>`;
+    // quick local parse for preview
+    try {
+      const txt = await f.text();
+      const jcal = ICAL.parse(txt);
+      const comp = new ICAL.Component(jcal);
+      const tzComp = comp.getFirstSubcomponent('vtimezone');
+      scheduleTz = tzComp?.getFirstPropertyValue('tzid') || comp.getFirstPropertyValue?.('x-wr-timezone') || 'UTC';
+      const vev = comp.getAllSubcomponents('vevent') || [];
+      parsedEvents = vev.map(v=> new ICAL.Event(v));
+      previewArea.innerHTML = `<strong>Preview (${parsedEvents.length} events)</strong><br>Timezone: ${scheduleTz}`;
+    } catch (err) {
+      previewArea.textContent = 'Failed to parse ICS for preview.';
+      parsedEvents = null;
     }
-  </script>
+  });
+
+  uploadBtn.addEventListener('click', async () => {
+    const name = document.getElementById('studentName').value.trim();
+    const f = icsFile.files[0];
+    if (!name || !f) return alert('Please enter a name and choose an .ics file');
+
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = 'Uploading...';
+
+    const fileId = Math.random().toString(36).slice(2,10);
+    const path = `${fileId}.ics`;
+
+    const { error } = await supabase.storage.from('schedules').upload(path, f, { cacheControl: '3600', upsert: false });
+    if (error) {
+      alert('Upload failed: ' + error.message);
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = 'Upload & Create Link';
+      return;
+    }
+
+    const viewLink = `${location.origin}/view.html?id=${fileId}&name=${encodeURIComponent(name)}`;
+    const publicUrl = `${location.origin}/view.html?id=${fileId}&name=${encodeURIComponent(name)}`;
+
+    // create QR with Google Chart API (simple no-lib approach)
+    const qrUrl = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(viewLink)}`;
+
+    resultArea.innerHTML = `
+      <div style="min-width:220px">
+        <div style="font-weight:600;margin-bottom:6px">Shareable link</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="shareInput" style="flex:1;padding:8px;border-radius:8px;border:1px solid #e6eef0" value="${publicUrl}">
+          <button class="primary" id="copyBtn" style="padding:8px 10px">Copy</button>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:10px;align-items:center">
+          <img class="qr" src="${qrUrl}" alt="QR code">
+          <div>
+            <button class="ghost" id="printBtn">Print</button>
+            <button class="ghost" id="downloadBtn">Download .ics</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('copyBtn').onclick = ()=> {
+      navigator.clipboard.writeText(publicUrl).then(()=> alert('Copied link'));
+    };
+    document.getElementById('printBtn').onclick = ()=> window.open(publicUrl, '_blank').print();
+    document.getElementById('downloadBtn').onclick = ()=> window.open(`${SUPABASE_URL}/storage/v1/object/public/schedules/${path}`, '_blank');
+
+    // Save local preview for quick view without re-download
+    if (parsedEvents) {
+      localStorage.setItem('altura_preview', JSON.stringify({name, fileId, tz: scheduleTz}));
+    }
+
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = 'Upload & Create Link';
+  });
+
+  clearLocal.addEventListener('click', ()=>{
+    localStorage.removeItem('altura_preview');
+    previewArea.textContent = 'Cleared local preview';
+  });
+
+  toggleDark.addEventListener('click', ()=>{
+    document.documentElement.classList.toggle('dark');
+    document.body.style.background = document.documentElement.classList.contains('dark') ? '#021712' : '';
+  });
+
+  // Load last preview
+  (function loadSaved(){
+    try {
+      const v = JSON.parse(localStorage.getItem('altura_preview'));
+      if (v) previewArea.textContent = `Last preview: ${v.name} (ID ${v.fileId}) — timezone: ${v.tz}`;
+    } catch(e){}
+  })();
+
+</script>
 </body>
 </html>
