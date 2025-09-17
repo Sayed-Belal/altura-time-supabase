@@ -13,9 +13,10 @@
     .container { max-width:900px; margin:0 auto; }
     .card { background:white; border-radius:10px; padding:18px; box-shadow:0 6px 18px rgba(0,0,0,0.06); margin:20px auto; text-align:center }
     .city-label { font-weight:bold; color:#e27d60; margin-bottom:6px }
-    .time { font-size:2em; font-weight:700; color:#2a9078 }
-    .call-status.safe { background:#5fb878; color:white; padding:6px 10px; border-radius:6px }
-    .call-status.avoid { background:#ef476f; color:white; padding:6px 10px; border-radius:6px }
+    .time { font-size:2rem; font-weight:700; color:#2a9078 }
+    .call-status.safe { background:#5fb878; color:#fff; padding:6px 10px; border-radius:6px; display:inline-block }
+    .call-status.avoid { background:#ef476f; color:#fff; padding:6px 10px; border-radius:6px; display:inline-block }
+    .call-status.maybe { background:#ffd166; color:#745800; padding:6px 10px; border-radius:6px; display:inline-block }
     .small { font-size:0.95em; color:#666; margin-top:6px }
   </style>
 </head>
@@ -24,83 +25,142 @@
     <div class="main-title">AlturaTime</div>
 
     <div id="viewerCard" class="card">
-      <div class="city-label" id="cityLabel"></div>
+      <div class="city-label" id="cityLabel">Loading schedule...</div>
       <div class="time" id="timeDisplay">--:--</div>
-      <div style="margin-top:8px"><span id="statusBadge" class="call-status">--</span></div>
+      <div style="margin-top:8px"><span id="statusBadge" class="call-status maybe">--</span></div>
       <div id="nextInfo" class="small"></div>
+      <div id="debug" style="text-align:left;margin-top:12px;color:#666;font-size:0.85rem"></div>
     </div>
   </div>
 
-  <script>
-    const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+<script>
+/*
+  VIEWER logic (fixed):
+  - Expands recurring events using ICAL.RecurExpansion
+  - Uses absolute timestamps for comparisons
+  - Displays local time in schedule timezone for readability
+  - Shows correct "CLASS IN SESSION", "GOOD TO CALL", or "AVOID CALLING"
+  - Shows next class countdown
+*/
 
-    const params = new URLSearchParams(location.search);
-    const fileId = params.get("id");
-    const name = params.get("name") || "Student";
+const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co"; // <--- paste your Supabase project URL
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg"; // <--- paste anon key (safe for public client with bucket public)
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    const cityLabel = document.getElementById("cityLabel");
-    const timeDisplay = document.getElementById("timeDisplay");
-    const statusBadge = document.getElementById("statusBadge");
-    const nextInfo = document.getElementById("nextInfo");
+const params = new URLSearchParams(location.search);
+const fileId = params.get("id");
+const name = params.get("name") || "Student";
 
-    async function loadSchedule() {
-      const { data } = supabase.storage.from("schedules").getPublicUrl(`${fileId}.ics`);
-      const res = await fetch(data.publicUrl);
-      const text = await res.text();
+const cityLabel = document.getElementById("cityLabel");
+const timeDisplay = document.getElementById("timeDisplay");
+const statusBadge = document.getElementById("statusBadge");
+const nextInfo = document.getElementById("nextInfo");
+const debugEl = document.getElementById("debug");
 
-      const events = new ICAL.Component(ICAL.parse(text))
-        .getAllSubcomponents("vevent")
-        .map(e => new ICAL.Event(e));
+if (!fileId) {
+  cityLabel.innerText = "No schedule ID provided.";
+  throw new Error("Missing file id");
+}
+cityLabel.innerText = `${decodeURIComponent(name)}'s Schedule`;
 
-      function render() {
-        const now = new Date();
-        const t12 = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        cityLabel.textContent = `${name}'s Schedule`;
-        timeDisplay.textContent = t12;
+/* utility to format an instant in the schedule timezone (if available) */
+function formatInTZ(date, tz) {
+  try {
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz });
+  } catch (e) {
+    return date.toLocaleTimeString();
+  }
+}
 
-        // check if in class
-        let inClass = events.some(ev => now >= ev.startDate.toJSDate() && now <= ev.endDate.toJSDate());
+/* main loader */
+async function loadSchedule() {
+  // get public URL from Supabase
+  const { data, error } = supabase.storage.from("schedules").getPublicUrl(`${fileId}.ics`);
+  if (error || !data?.publicUrl) {
+    cityLabel.innerText = "Schedule not found";
+    debugEl.innerText = "Failed to get publicUrl: " + (error ? error.message : "no publicUrl");
+    return;
+  }
 
-        if (inClass) {
-          statusBadge.className = "call-status avoid";
-          statusBadge.textContent = "CLASS IN SESSION";
-        } else {
-          const mins = now.getHours() * 60 + now.getMinutes();
-          if (mins >= 420 && mins <= 1290) {
-            statusBadge.className = "call-status safe";
-            statusBadge.textContent = "GOOD TO CALL";
-          } else {
-            statusBadge.className = "call-status avoid";
-            statusBadge.textContent = "AVOID CALLING";
-          }
-        }
+  const res = await fetch(data.publicUrl);
+  if (!res.ok) {
+    cityLabel.innerText = "Schedule could not be fetched";
+    debugEl.innerText = `Fetch failed ${res.status}`;
+    return;
+  }
+  const icsText = await res.text();
 
-        // find next class
-        let next = null, md = Infinity;
-        for (const ev of events) {
-          const start = ev.startDate.toJSDate();
-          if (start > now) {
-            const diff = start - now;
-            if (diff < md) { md = diff; next = start; }
-          }
-        }
-        if (next) {
-          const mins = Math.round((next - now)/60000);
-          const h = Math.floor(mins/60);
-          const m = mins % 60;
-          nextInfo.textContent = `Next class in ${h>0 ? h + " hr " : ""}${m} min`;
-        } else {
-          nextInfo.textContent = "No more upcoming classes today.";
-        }
+  // parse calendar
+  const jcal = ICAL.parse(icsText);
+  const comp = new ICAL.Component(jcal);
+
+  // timezone detection: prefer X-WR-TIMEZONE header, otherwise VTIMEZONE tzid
+  let tz = comp.getFirstPropertyValue && comp.getFirstPropertyValue('x-wr-timezone');
+  if (!tz) {
+    const tzComp = comp.getFirstSubcomponent('vtimezone');
+    if (tzComp) tz = tzComp.getFirstPropertyValue('tzid');
+  }
+  tz = tz || 'UTC';
+
+  // collect occurrences between (now - 1 day) .. (now + windowDays)
+  const now = new Date();
+  const rangeStart = new Date(now.getTime() - 24*60*60*1000); // 24 hours back (catch running events)
+  const rangeEnd = new Date(now.getTime() + 14*24*60*60*1000); // 14 days ahead
+
+  const vevents = comp.getAllSubcomponents('vevent') || [];
+  const occurrences = [];
+
+  // iterate each VEVENT and expand recurrences if present
+  for (const v of vevents) {
+    try {
+      const ev = new ICAL.Event(v);
+      // compute duration in ms (fall back to 0 if missing)
+      let durMs = 0;
+      try {
+        durMs = ev.endDate.toJSDate().getTime() - ev.startDate.toJSDate().getTime();
+      } catch (e) {
+        durMs = 0;
       }
 
-      render();
-      setInterval(render, 60000); // update every minute
-    }
+      // If the event has a RRULE or RDATE → expand occurrences into the window
+      const hasRrule = v.getFirstProperty('rrule') !== null;
+      const hasRdate = v.getFirstProperty('rdate') !== null;
 
-    loadSchedule();
-  </script>
-</body>
-</html>
+      if (hasRrule || hasRdate) {
+        // use RecurExpansion (handles EXDATE too)
+        const dtstart = ev.startDate; // ICAL.Time
+        const exp = new ICAL.RecurExpansion({ component: v, dtstart: dtstart });
+
+        let next;
+        // iterate until we pass rangeEnd or expansion exhausted
+        while ((next = exp.next())) {
+          const occStart = next.toJSDate();
+          if (occStart > rangeEnd) break;
+          if (occStart >= rangeStart) {
+            occurrences.push({
+              start: occStart,
+              end: new Date(occStart.getTime() + durMs),
+              summary: ev.summary || '',
+              rawEvent: ev
+            });
+          }
+        }
+      } else {
+        // single (non-recurring) event
+        const s = ev.startDate.toJSDate();
+        const eEnd = ev.endDate ? ev.endDate.toJSDate() : new Date(s.getTime() + durMs);
+        if (eEnd >= rangeStart && s <= rangeEnd) {
+          occurrences.push({ start: s, end: eEnd, summary: ev.summary || '', rawEvent: ev });
+        }
+      }
+    } catch (err) {
+      // ignore bad event but log for debug
+      console.warn('failed to process VEVENT', err);
+    }
+  }
+
+  // sort occurrences by start time
+  occurrences.sort((a,b) => a.start - b.start);
+
+  // DEBUG: show the next several occurrences in debug panel (useful)
+  debugEl.innerHT
