@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AlturaTime - Upload</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f8fafb; padding: 20px; }
+    h1 { color: #2a9078; }
+    .btn { background: #2a9078; color: white; padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; }
+    input, .btn { margin: 8px 0; width: 100%; max-width: 400px; }
+    .link { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>AlturaTime</h1>
+  <p>Upload your schedule and get a share link.</p>
+  <input type="text" id="name" placeholder="Your Name">
+  <input type="file" id="file" accept=".ics">
+  <button class="btn" onclick="uploadFile()">Upload & Generate Link</button>
+  <div class="link" id="link"></div>
+
+  <script>
+    const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function uploadFile() {
+      const name = document.getElementById("name").value.trim();
+      const file = document.getElementById("file").files[0];
+      if (!name || !file) return alert("Enter name & choose file!");
+
+      const fileId = Math.random().toString(36).substring(2, 10);
+      const path = `${fileId}.ics`;
+
+      let { error } = await supabase.storage.from("schedules").upload(path, file);
+      if (error) {
+        alert("Upload failed: " + error.message);
+        return;
+      }
+
+      const link = `view.html?id=${fileId}&name=${encodeURIComponent(name)}`;
+      document.getElementById("link").innerHTML = 
+        `Share this link: <a href="${link}" target="_blank">${link}</a>`;
+    }
+  </script>
+</body>
+</html>
