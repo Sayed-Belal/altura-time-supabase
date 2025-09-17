@@ -9,7 +9,7 @@
   <script src="https://unpkg.com/ical.js@1.4.0/build/ical.min.js"></script>
   <style>
     :root{--accent:#2a9078;--muted:#6b7280;--bg:#f6fbfa;--card:#fff;--danger:#d62828}
-    html,body{height:100%;margin:0;font-family:Lato,Inter,system-ui;background:var(--bg);color:#0f172a}
+    body{margin:0;font-family:Lato,Inter,system-ui;background:var(--bg);color:#0f172a}
     .wrap{max-width:980px;margin:0 auto;padding:28px}
     .brand{font-family:Nunito,Inter;font-size:28px;color:var(--accent);font-weight:900;text-align:center}
     .lead{color:var(--muted);text-align:center;margin-top:6px}
@@ -20,48 +20,35 @@
     .status{padding:8px 12px;border-radius:8px;font-weight:700;display:inline-block}
     .status.safe{background:#5fb878;color:#fff}
     .status.avoid{background:var(--danger);color:#fff}
-    .status.maybe{background:#ffd166;color:#333}
-    .controls{display:flex;gap:8px;align-items:center}
-    .btn{background:transparent;border:1px solid #e6eef0;padding:8px 10px;border-radius:8px;cursor:pointer}
-    .muted{color:var(--muted)}
-    .list{margin-top:14px;text-align:left}
-    .event{padding:10px;border-radius:8px;border:1px solid #f1f5f6;margin-bottom:8px}
     .small{font-size:0.95rem;color:var(--muted)}
+    .btn{background:transparent;border:1px solid #e6eef0;padding:8px 10px;border-radius:8px;cursor:pointer}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="brand">AlturaTime</div>
-    <div class="lead">Know when to call — clear availability at a glance.</div>
+    <div class="lead">See when it’s the right time to call</div>
 
-    <div class="card" role="region" aria-labelledby="status-heading">
+    <div class="card">
       <div class="topRow">
         <div>
           <div id="nameTitle" style="font-weight:700;font-size:1.1rem">Loading…</div>
           <div class="tz small" id="tzLabel">Timezone</div>
         </div>
-
         <div style="text-align:right">
           <div id="timeDisplay" class="timeLarge">--:--</div>
-          <div style="margin-top:8px" id="statusBadge" class="status maybe" role="status">--</div>
+          <div style="margin-top:8px" id="statusBadge" class="status">--</div>
         </div>
       </div>
-
       <div style="margin-top:12px" class="small" id="nextInfo">Next class —</div>
-
       <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
         <button class="btn" id="copyLinkBtn">Copy link</button>
-        <button class="btn" id="qrBtn">QR</button>
         <button class="btn" id="printBtn">Print</button>
-        <button class="btn" id="downloadBtn">Download .ics</button>
       </div>
-
-      <div class="list" id="todayList" aria-live="polite" style="margin-top:12px"></div>
     </div>
   </div>
 
 <script>
-  // CONFIG - set your Supabase values
   const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
   const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -75,37 +62,29 @@
   const timeDisplay = document.getElementById('timeDisplay');
   const statusBadge = document.getElementById('statusBadge');
   const nextInfo = document.getElementById('nextInfo');
-  const todayList = document.getElementById('todayList');
 
-  if (!id) { nameTitle.textContent = 'Missing schedule ID'; throw new Error('Missing schedule id'); }
   nameTitle.textContent = `${name}'s Schedule`;
 
-  let occurrences = [];
-  let scheduleTz = 'UTC';
+  let occurrences = [], scheduleTz = 'UTC';
 
-  function formatTimeInTZ(date, tz) {
-    return date.toLocaleString('en-US', { timeZone: tz, hour:'numeric', minute:'2-digit', hour12:true });
+  function formatInTZ(date, tz) {
+    return date.toLocaleString('en-US', {timeZone: tz, hour:'numeric', minute:'2-digit', hour12:true});
   }
 
-  async function fetchAndBuild() {
+  async function loadSchedule() {
     const { data } = supabase.storage.from('schedules').getPublicUrl(`${id}.ics`);
     if (!data?.publicUrl) { nameTitle.textContent = 'Schedule not found'; return; }
 
     const res = await fetch(data.publicUrl);
     if (!res.ok) { nameTitle.textContent = 'Failed to fetch schedule'; return; }
+
     const txt = await res.text();
     const clean = txt.replace(/^\uFEFF/, '');
     const jcal = ICAL.parse(clean);
     const comp = new ICAL.Component(jcal);
 
-    // timezone detection
-    scheduleTz = comp.getFirstPropertyValue?.('x-wr-timezone') || (comp.getFirstSubcomponent('vtimezone')?.getFirstPropertyValue('tzid')) || 'UTC';
+    scheduleTz = comp.getFirstPropertyValue?.('x-wr-timezone') || comp.getFirstSubcomponent('vtimezone')?.getFirstPropertyValue('tzid') || 'UTC';
     tzLabel.textContent = scheduleTz;
-
-    // build occurrences (window)
-    const now = new Date();
-    const windowStart = new Date(now.getTime() - 24*60*60*1000);
-    const windowEnd = new Date(now.getTime() + 14*24*60*60*1000);
 
     const vevents = comp.getAllSubcomponents('vevent') || [];
     occurrences = [];
@@ -114,101 +93,64 @@
       try {
         const ev = new ICAL.Event(v);
         const dur = ev.endDate ? (ev.endDate.toJSDate().getTime() - ev.startDate.toJSDate().getTime()) : 0;
-        const hasRrule = v.getFirstProperty('rrule') != null;
-        if (hasRrule || v.getFirstProperty('rdate')) {
+        if (v.getFirstProperty('rrule') || v.getFirstProperty('rdate')) {
           const exp = new ICAL.RecurExpansion({component:v, dtstart: ev.startDate});
           let next;
           while ((next = exp.next())) {
             const s = next.toJSDate();
-            if (s > windowEnd) break;
-            if (s >= windowStart) occurrences.push({start:s, end:new Date(s.getTime()+dur), summary:ev.summary});
+            if (s > Date.now() + 14*864e5) break;
+            occurrences.push({start:s,end:new Date(s.getTime()+dur),summary:ev.summary});
           }
         } else {
           const s = ev.startDate.toJSDate();
           const e = ev.endDate ? ev.endDate.toJSDate() : new Date(s.getTime()+dur);
-          if (e >= windowStart && s <= windowEnd) occurrences.push({start:s, end:e, summary:ev.summary});
+          occurrences.push({start:s,end:e,summary:ev.summary});
         }
-      } catch (err) { console.warn('evt parse', err); }
+      } catch {}
     }
-
-    occurrences.sort((a,b) => a.start - b.start);
-
-    // initial render
-    updateStatusAndUI();
-
-    // keep time shown updated and status recalculated
-    setInterval(()=> {
-      timeDisplay.textContent = new Date().toLocaleString('en-US', {timeZone: scheduleTz, hour:'numeric', minute:'2-digit', hour12:true});
-    }, 15000);
-    setInterval(updateStatusAndUI, 30000); // re-evaluate every 30s
+    occurrences.sort((a,b)=>a.start-b.start);
+    updateStatus();
+    setInterval(updateStatus, 30000);
   }
 
-  function updateStatusAndUI() {
-    const nowMs = Date.now();
+  function updateStatus() {
+    const now = new Date();
+    const nowMs = now.getTime();
     const inClass = occurrences.find(o => nowMs >= o.start.getTime() && nowMs <= o.end.getTime());
-    const future = occurrences.filter(o => o.start.getTime() > nowMs);
-    const next = future.length ? future[0] : null;
+    const next = occurrences.find(o => o.start.getTime() > nowMs);
 
-    // time display (in schedule tz)
-    timeDisplay.textContent = new Date().toLocaleString('en-US', {timeZone: scheduleTz, hour:'numeric', minute:'2-digit', hour12:true});
-
-    const hourInTz = parseInt(new Date().toLocaleString('en-US', {timeZone: scheduleTz, hour:'2-digit', hour12:false}));
-    const isNight = (hourInTz < 7) || (hourInTz >= 21);
+    timeDisplay.textContent = formatInTZ(now, scheduleTz);
+    const hourInTz = parseInt(new Date().toLocaleString('en-US',{timeZone:scheduleTz,hour:'2-digit',hour12:false}));
+    const isNight = (hourInTz < 7 || hourInTz >= 21);
 
     if (inClass) {
       statusBadge.className = 'status avoid';
       statusBadge.textContent = 'DO NOT CALL — CLASS IN PROGRESS';
-      const mins = Math.max(0, Math.round((inClass.end.getTime() - nowMs) / 60000));
-      nextInfo.textContent = `${inClass.summary} — ends in ${Math.floor(mins/60)>0 ? Math.floor(mins/60)+' hr ' : ''}${mins%60} min`;
+      const mins = Math.round((inClass.end.getTime()-nowMs)/60000);
+      nextInfo.textContent = `${inClass.summary} — ends in ${Math.floor(mins/60)>0?Math.floor(mins/60)+' hr ':''}${mins%60} min`;
     } else if (isNight) {
       statusBadge.className = 'status avoid';
       statusBadge.textContent = 'DO NOT CALL — NIGHT TIME';
       if (next) {
-        const mins = Math.round((next.start.getTime() - nowMs)/60000);
+        const mins = Math.round((next.start.getTime()-nowMs)/60000);
         nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0?Math.floor(mins/60)+' hr ':''}${mins%60} min`;
-      } else nextInfo.textContent = 'No upcoming classes found.';
+      }
     } else {
       statusBadge.className = 'status safe';
       statusBadge.textContent = 'GOOD TO CALL';
       if (next) {
-        const mins = Math.round((next.start.getTime() - nowMs)/60000);
+        const mins = Math.round((next.start.getTime()-nowMs)/60000);
         nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0?Math.floor(mins/60)+' hr ':''}${mins%60} min`;
-      } else nextInfo.textContent = 'No upcoming classes found.';
-    }
-
-    // today's schedule (in schedule tz)
-    const localNow = new Date(new Date().toLocaleString('en-US', {timeZone: scheduleTz}));
-    const startDay = new Date(localNow); startDay.setHours(0,0,0,0);
-    const endDay = new Date(startDay.getTime() + 24*60*60*1000);
-
-    const today = occurrences.filter(o => {
-      const sLocal = new Date(o.start.toLocaleString('en-US', {timeZone: scheduleTz}));
-      return sLocal >= startDay && sLocal < endDay;
-    });
-
-    todayList.innerHTML = today.length ? today.map(ev => `
-      <div class="event" role="article">
-        <div style="font-weight:700">${ev.summary}</div>
-        <div class="small">${formatDisplay(ev.start)} — ${formatDisplay(ev.end)}</div>
-      </div>
-    `).join('') : '<div class="small">No classes today.</div>';
-
-    function formatDisplay(d) {
-      return d.toLocaleString('en-US', {timeZone: scheduleTz, hour:'numeric', minute:'2-digit', hour12:true});
+      }
     }
   }
 
-  // share/download buttons wired after load
-  function wireButtons() {
-    const base = location.origin + location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
-    const link = `${base}view.html?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`;
-    document.getElementById('copyLinkBtn').onclick = ()=> navigator.clipboard.writeText(link).then(()=> alert('Link copied'));
-    document.getElementById('qrBtn').onclick = ()=> window.open(`https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=${encodeURIComponent(link)}`, '_blank');
-    document.getElementById('printBtn').onclick = ()=> window.print();
-    document.getElementById('downloadBtn').onclick = ()=> window.open(`${SUPABASE_URL}/storage/v1/object/public/schedules/${encodeURIComponent(id)}.ics`, '_blank');
-  }
+  document.getElementById('copyLinkBtn').onclick = ()=> {
+    navigator.clipboard.writeText(location.href).then(()=> alert('Link copied'));
+  };
+  document.getElementById('printBtn').onclick = ()=> window.print();
 
-  fetchAndBuild().then(wireButtons).catch(err => { console.error(err); nameTitle.textContent = 'Failed to load schedule'; });
+  loadSchedule();
 </script>
 </body>
 </html>
