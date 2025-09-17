@@ -163,4 +163,69 @@ async function loadSchedule() {
   occurrences.sort((a,b) => a.start - b.start);
 
   // DEBUG: show the next several occurrences in debug panel (useful)
-  debugEl.innerHT
+  debugEl.innerHTML = '<strong>Upcoming occurrences (for debug):</strong><br>';
+  for (let i=0;i<Math.min(12, occurrences.length); i++) {
+    const o = occurrences[i];
+    debugEl.innerHTML += `${o.summary} — ${o.start.toLocaleString('en-US',{timeZone: tz})} to ${o.end.toLocaleString('en-US',{timeZone: tz})}<br>`;
+  }
+  if (occurrences.length===0) debugEl.innerHTML += '(no occurrences found in 14-day window)';
+
+  // determine if currently in class (absolute comparisons)
+  const nowMs = Date.now();
+  const inClassOcc = occurrences.find(o => nowMs >= o.start.getTime() && nowMs <= o.end.getTime());
+  const inClass = Boolean(inClassOcc);
+
+  // find next occurrence after now
+  const future = occurrences.filter(o => o.start.getTime() > nowMs);
+  const nextOcc = future.length ? future[0] : null;
+
+  // display current time in the schedule timezone for nice UX
+  const nowInTZStr = new Date().toLocaleString('en-US', { timeZone: tz, hour: 'numeric', minute:'2-digit', hour12: true });
+  timeDisplay.textContent = nowInTZStr;
+
+  // status logic: priority -> inClass -> avoid if night -> else good to call
+  const hourInTZ = parseInt(new Date().toLocaleString('en-US', { timeZone: tz, hour: '2-digit', hour12: false }));
+  const isNight = (hourInTZ < 7) || (hourInTZ >= 21); // before 7:00 or after 21:00
+
+  if (inClass) {
+    statusBadge.className = 'call-status avoid';
+    statusBadge.textContent = 'CLASS IN SESSION';
+    // show which class is in session + time left
+    const remainingMin = Math.round((inClassOcc.end.getTime() - nowMs)/60000);
+    nextInfo.textContent = `${inClassOcc.summary} — ends in ${Math.floor(remainingMin/60)>0 ? Math.floor(remainingMin/60) + ' hr ' : ''}${remainingMin%60} min`;
+  } else if (isNight) {
+    statusBadge.className = 'call-status avoid';
+    statusBadge.textContent = 'AVOID CALLING';
+    if (nextOcc) {
+      const mins = Math.round((nextOcc.start.getTime() - nowMs)/60000);
+      nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0 ? Math.floor(mins/60) + ' hr ' : ''}${mins%60} min`;
+    } else {
+      nextInfo.textContent = 'No upcoming classes found.';
+    }
+  } else {
+    // not in class and not night
+    statusBadge.className = 'call-status safe';
+    statusBadge.textContent = 'GOOD TO CALL';
+    if (nextOcc) {
+      const mins = Math.round((nextOcc.start.getTime() - nowMs)/60000);
+      nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0 ? Math.floor(mins/60) + ' hr ' : ''}${mins%60} min`;
+    } else {
+      nextInfo.textContent = 'No upcoming classes found.';
+    }
+  }
+
+  // update clock every 30s (display only)
+  setInterval(() => {
+    timeDisplay.textContent = new Date().toLocaleString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true });
+  }, 30000);
+}
+
+
+loadSchedule().catch(err => {
+  cityLabel.innerText = 'Failed to load schedule';
+  debugEl.innerText = String(err);
+  console.error(err);
+});
+</script>
+</body>
+</html>
