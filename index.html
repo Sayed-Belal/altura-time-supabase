@@ -3,33 +3,55 @@
 <head>
   <meta charset="UTF-8">
   <title>AlturaTime - Upload</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=Lato:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: Arial, sans-serif; background: #f8fafb; padding: 20px; }
-    h1 { color: #2a9078; }
-    .btn { background: #2a9078; color: white; padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; }
-    input, .btn { margin: 8px 0; width: 100%; max-width: 400px; }
-    .link { margin-top: 20px; }
+    body { font-family: 'Lato', sans-serif; background:#f8fafb; margin:0; padding:20px; color:#203040; }
+    .main-title { font-family:'Nunito',sans-serif; font-size:2.2em; color:#2a9078; font-weight:900; text-align:center; }
+    .sub-title { text-align:center; color:#4e5d6c; margin-bottom:20px; }
+    .container { max-width:900px; margin:0 auto; }
+    .card { background:white; border-radius:10px; padding:18px; box-shadow:0 6px 18px rgba(0,0,0,0.06); margin-bottom:18px; }
+    .file-label { background:#e27d60; color:white; padding:10px 16px; border-radius:8px; display:inline-block; cursor:pointer }
+    input[type="file"] { display:none; }
+    input[type="text"] { width:100%;padding:10px;border-radius:8px;border:1px solid #ddd; margin-bottom:10px }
+    button { background:#2a9078;color:#fff;padding:10px 14px;border-radius:8px;border:none;cursor:pointer }
+    .link { margin-top:12px }
   </style>
 </head>
 <body>
-  <h1>AlturaTime</h1>
-  <p>Upload your schedule and get a share link.</p>
-  <input type="text" id="name" placeholder="Your Name">
-  <input type="file" id="file" accept=".ics">
-  <button class="btn" onclick="uploadFile()">Upload & Generate Link</button>
-  <div class="link" id="link"></div>
+  <div class="container">
+    <div class="main-title">AlturaTime</div>
+    <div class="sub-title">Enter a name & upload an .ics class schedule — get a shareable link.</div>
+
+    <div class="card">
+      <input type="text" id="studentName" placeholder="Student's name (e.g., Sayed Belal)" required />
+      <input type="file" id="icsFile" accept=".ics" />
+      <label for="icsFile" class="file-label">Choose .ics file</label>
+      <span id="fileName" style="margin-left:12px;color:#666;font-size:0.9em"></span>
+      <div style="margin-top:12px">
+        <button onclick="uploadFile()">Upload & Create Link</button>
+      </div>
+      <div id="result" class="link"></div>
+    </div>
+  </div>
 
   <script>
     const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg"; // paste anon key
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    const icsFileInput = document.getElementById("icsFile");
+    const fileNameSpan = document.getElementById("fileName");
+
+    icsFileInput.addEventListener("change", e => {
+      fileNameSpan.textContent = e.target.files[0]?.name || "";
+    });
+
     async function uploadFile() {
-      const name = document.getElementById("name").value.trim();
-      const file = document.getElementById("file").files[0];
-      if (!name || !file) return alert("Enter name & choose file!");
+      const name = document.getElementById("studentName").value.trim();
+      const file = icsFileInput.files[0];
+      if (!name || !file) return alert("Enter name & choose a file");
 
       const fileId = Math.random().toString(36).substring(2, 10);
       const path = `${fileId}.ics`;
@@ -41,8 +63,8 @@
       }
 
       const link = `view.html?id=${fileId}&name=${encodeURIComponent(name)}`;
-      document.getElementById("link").innerHTML = 
-        `Share this link: <a href="${link}" target="_blank">${link}</a>`;
+      document.getElementById("result").innerHTML = 
+        `✅ Uploaded! Share this link: <a href="${link}" target="_blank">${link}</a>`;
     }
   </script>
 </body>
