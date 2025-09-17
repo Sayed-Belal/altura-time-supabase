@@ -3,60 +3,101 @@
 <head>
   <meta charset="UTF-8">
   <title>AlturaTime - Viewer</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=Lato:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/ical.js@1.4.0/build/ical.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; background: #f8fafb; padding: 20px; color:#203040; }
-    h1 { color: #2a9078; }
-    .card { background: white; border-radius: 8px; padding: 16px; margin: 12px 0; box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
-    .status { padding: 6px 12px; border-radius: 6px; font-weight: bold; }
-    .free { background: #5fb878; color: white; }
-    .avoid { background: #ef476f; color: white; }
-    .upcoming { background: #ffd166; color: #333; }
+    body { font-family:'Lato',sans-serif; background:#f8fafb; margin:0; padding:20px; color:#203040; }
+    .main-title { font-family:'Nunito',sans-serif; font-size:2.2em; color:#2a9078; font-weight:900; text-align:center; }
+    .container { max-width:900px; margin:0 auto; }
+    .card { background:white; border-radius:10px; padding:18px; box-shadow:0 6px 18px rgba(0,0,0,0.06); margin:20px auto; text-align:center }
+    .city-label { font-weight:bold; color:#e27d60; margin-bottom:6px }
+    .time { font-size:2em; font-weight:700; color:#2a9078 }
+    .call-status.safe { background:#5fb878; color:white; padding:6px 10px; border-radius:6px }
+    .call-status.avoid { background:#ef476f; color:white; padding:6px 10px; border-radius:6px }
+    .small { font-size:0.95em; color:#666; margin-top:6px }
   </style>
 </head>
 <body>
-  <h1 id="title">Loading...</h1>
-  <div id="schedule"></div>
+  <div class="container">
+    <div class="main-title">AlturaTime</div>
+
+    <div id="viewerCard" class="card">
+      <div class="city-label" id="cityLabel"></div>
+      <div class="time" id="timeDisplay">--:--</div>
+      <div style="margin-top:8px"><span id="statusBadge" class="call-status">--</span></div>
+      <div id="nextInfo" class="small"></div>
+    </div>
+  </div>
 
   <script>
     const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const params = new URLSearchParams(location.search);
     const fileId = params.get("id");
     const name = params.get("name") || "Student";
 
-    document.getElementById("title").innerText = `Schedule for ${name}`;
+    const cityLabel = document.getElementById("cityLabel");
+    const timeDisplay = document.getElementById("timeDisplay");
+    const statusBadge = document.getElementById("statusBadge");
+    const nextInfo = document.getElementById("nextInfo");
 
     async function loadSchedule() {
       const { data } = supabase.storage.from("schedules").getPublicUrl(`${fileId}.ics`);
-      const url = data.publicUrl;
-      const res = await fetch(url);
+      const res = await fetch(data.publicUrl);
       const text = await res.text();
 
       const events = new ICAL.Component(ICAL.parse(text))
         .getAllSubcomponents("vevent")
         .map(e => new ICAL.Event(e));
 
-      const now = new Date();
-      let html = "";
-      events.forEach(ev => {
-        const start = ev.startDate.toJSDate();
-        const end = ev.endDate.toJSDate();
-        let status = "free";
-        if (now >= start && now <= end) status = "avoid";
-        else if (now < start) status = "upcoming";
-        html += `<div class="card">
-          <strong>${ev.summary}</strong><br>
-          ${start.toLocaleString()} - ${end.toLocaleString()}<br>
-          <span class="status ${status}">${status === "avoid" ? "CLASS NOW" : status === "upcoming" ? "UPCOMING" : "FREE"}</span>
-        </div>`;
-      });
-      document.getElementById("schedule").innerHTML = html || "<p>No events found.</p>";
+      function render() {
+        const now = new Date();
+        const t12 = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        cityLabel.textContent = `${name}'s Schedule`;
+        timeDisplay.textContent = t12;
+
+        // check if in class
+        let inClass = events.some(ev => now >= ev.startDate.toJSDate() && now <= ev.endDate.toJSDate());
+
+        if (inClass) {
+          statusBadge.className = "call-status avoid";
+          statusBadge.textContent = "CLASS IN SESSION";
+        } else {
+          const mins = now.getHours() * 60 + now.getMinutes();
+          if (mins >= 420 && mins <= 1290) {
+            statusBadge.className = "call-status safe";
+            statusBadge.textContent = "GOOD TO CALL";
+          } else {
+            statusBadge.className = "call-status avoid";
+            statusBadge.textContent = "AVOID CALLING";
+          }
+        }
+
+        // find next class
+        let next = null, md = Infinity;
+        for (const ev of events) {
+          const start = ev.startDate.toJSDate();
+          if (start > now) {
+            const diff = start - now;
+            if (diff < md) { md = diff; next = start; }
+          }
+        }
+        if (next) {
+          const mins = Math.round((next - now)/60000);
+          const h = Math.floor(mins/60);
+          const m = mins % 60;
+          nextInfo.textContent = `Next class in ${h>0 ? h + " hr " : ""}${m} min`;
+        } else {
+          nextInfo.textContent = "No more upcoming classes today.";
+        }
+      }
+
+      render();
+      setInterval(render, 60000); // update every minute
     }
 
     loadSchedule();
