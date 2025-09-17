@@ -6,15 +6,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/ical.js@1.4.0/build/ical.min.js"></script>
   <style>
-    :root{--accent:#2a9078;--muted:#6b7280;--bg:#f6fbfa;--card:#ffffff;--danger:#d62828}
-    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial,Helvetica;}
-    body{background:linear-gradient(180deg,#2a9078 0%, #1f6f5b 70%);padding:28px;color:#fff}
+    :root{--accent:#2a9078;--bg:#f6fbfa;--card:#ffffff}
+    body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,#2a9078 0%, #1f6f5b 70%);padding:28px;color:#fff}
     .wrap{max-width:920px;margin:0 auto}
     header{text-align:center;margin-bottom:18px}
     .title{font-weight:700;color:#fff;font-size:28px}
-    .subtitle{color:rgba(255,255,255,0.85);margin-top:6px;font-weight:400}
+    .subtitle{color:rgba(255,255,255,0.9);margin-top:6px}
+    .desc{margin-top:10px;color:rgba(255,255,255,0.85);font-size:15px;line-height:1.5}
     .card{background:var(--card);color:#0f172a;border-radius:12px;padding:18px;margin-top:18px;box-shadow:0 8px 30px rgba(0,0,0,0.12)}
     label.file{display:inline-block;background:#ef7b68;color:#fff;padding:10px 14px;border-radius:8px;cursor:pointer;margin-right:12px}
     input[type="file"]{display:none}
@@ -22,29 +21,25 @@
     .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px}
     button.primary{background:var(--accent);color:#fff;border:none;padding:10px 14px;border-radius:10px;cursor:pointer}
     button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.25);padding:8px 12px;border-radius:10px;cursor:pointer;color:#fff}
-    .linkBox{margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .muted{color:#475569;font-size:14px}
-    .qr{width:120px;height:120px;border-radius:8px;background:#fff;padding:8px;box-shadow:0 6px 18px rgba(0,0,0,0.05)}
+    .linkBox{margin-top:14px}
     footer{margin-top:30px;text-align:center;color:rgba(255,255,255,0.9);font-size:13px}
-    @media (prefers-color-scheme:dark){ body{background:#082a23} .card{background:#042018;color:#e6fff6} }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
       <div class="title">AlturaTime</div>
-      <div class="subtitle">Upload your .ics class schedule and generate a shareable link</div>
+      <div class="subtitle">Your availability, made simple</div>
+      <div class="desc">Upload your class schedule once, and share a single link with your loved ones. They’ll always know the right time to call — avoiding classes and night hours automatically.</div>
     </header>
 
-    <section class="card" aria-labelledby="upload-heading">
-      <h2 id="upload-heading" style="margin:0 0 8px 0;font-size:18px">Create your shareable schedule</h2>
-
+    <section class="card">
       <input id="studentName" type="text" placeholder="Student's name (e.g., Sayed Belal)" aria-label="Student name">
 
       <div class="row">
         <label class="file" for="icsFile">Choose .ics file</label>
-        <div id="fileName" class="muted">No file chosen</div>
-        <input id="icsFile" type="file" accept=".ics" aria-label="ICS file input">
+        <div id="fileName" style="color:#475569;font-size:14px">No file chosen</div>
+        <input id="icsFile" type="file" accept=".ics">
       </div>
 
       <div class="row" style="margin-top:12px">
@@ -54,26 +49,18 @@
         <button class="ghost" id="toggleDark">Toggle Dark</button>
       </div>
 
-      <div id="resultArea" class="linkBox" style="margin-top:16px"></div>
-    </section>
-
-    <section class="card" style="margin-top:18px">
-      <h3 style="margin:0 0 10px 0">Preview (local)</h3>
-      <div id="previewArea" class="muted">Upload a file to preview the class summary and status locally.</div>
+      <div id="resultArea" class="linkBox"></div>
     </section>
 
     <footer>Made with ♥ — AlturaTime</footer>
   </div>
 
 <script>
-  // CONFIG — replace with your Supabase details
   const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
   const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  // helpers
   function getBaseURL() {
-    // returns base path for view.html that works on GitHub Pages or other hosts
     let path = location.pathname;
     if (path.endsWith('/')) return location.origin + path;
     return location.origin + path.substring(0, path.lastIndexOf('/') + 1);
@@ -83,35 +70,12 @@
   const fileName = document.getElementById('fileName');
   const uploadBtn = document.getElementById('uploadBtn');
   const resultArea = document.getElementById('resultArea');
-  const previewArea = document.getElementById('previewArea');
   const clearLocal = document.getElementById('clearLocal');
   const toggleDark = document.getElementById('toggleDark');
 
-  let parsedEvents = null;
-  let scheduleTz = 'UTC';
-
-  // Preview parse
-  icsFile.addEventListener('change', async (e) => {
+  icsFile.addEventListener('change', e => {
     const f = e.target.files[0];
-    if (!f) { fileName.textContent = 'No file chosen'; previewArea.textContent=''; return; }
-    fileName.textContent = f.name;
-
-    try {
-      const txt = await f.text();
-      // tolerant trim BOM
-      const clean = txt.replace(/^\uFEFF/, '');
-      const jcal = ICAL.parse(clean);
-      const comp = new ICAL.Component(jcal);
-      const tzComp = comp.getFirstSubcomponent('vtimezone');
-      scheduleTz = tzComp?.getFirstPropertyValue('tzid') || comp.getFirstPropertyValue?.('x-wr-timezone') || 'UTC';
-      const vev = comp.getAllSubcomponents('vevent') || [];
-      parsedEvents = vev.map(v => new ICAL.Event(v));
-      previewArea.innerHTML = `<strong>Preview (${parsedEvents.length} events)</strong><br>Timezone: ${scheduleTz}`;
-    } catch (err) {
-      console.error('parse fail', err);
-      previewArea.textContent = 'Failed to parse ICS for preview.';
-      parsedEvents = null;
-    }
+    fileName.textContent = f ? f.name : 'No file chosen';
   });
 
   uploadBtn.addEventListener('click', async () => {
@@ -127,40 +91,21 @@
     const path = `${fileId}.ics`;
 
     try {
-      const { data, error } = await supabase.storage.from('schedules').upload(path, f, { cacheControl: '3600', upsert: false });
+      const { error } = await supabase.storage.from('schedules').upload(path, f, { cacheControl: '3600', upsert: false });
       if (error) throw error;
 
-      // baseURL to view.html (works for GitHub Pages)
       const base = getBaseURL();
       const viewLink = `${base}view.html?id=${fileId}&name=${encodeURIComponent(name)}`;
 
-      // QR (Google Chart API)
-      const qrUrl = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(viewLink)}`;
-
-      const publicDownload = `${SUPABASE_URL}/storage/v1/object/public/schedules/${encodeURIComponent(path)}`;
-
       resultArea.innerHTML = `
-        <div style="min-width:220px">
+        <div>
           <div style="font-weight:600;margin-bottom:6px">Shareable link</div>
           <div style="display:flex;gap:8px;align-items:center">
             <input id="shareInput" style="flex:1;padding:8px;border-radius:8px;border:1px solid #e6eef0" value="${viewLink}">
             <button class="primary" id="copyBtn" style="padding:8px 10px">Copy</button>
           </div>
-          <div style="display:flex;gap:12px;margin-top:10px;align-items:center">
-            <img class="qr" src="${qrUrl}" alt="QR code">
-            <div>
-              <button class="ghost" id="printBtn">Open</button>
-              <button class="ghost" id="downloadBtn">Download .ics</button>
-            </div>
-          </div>
         </div>`;
-
-      document.getElementById('copyBtn').onclick = () => navigator.clipboard.writeText(viewLink).then(()=> alert('Copied link'));
-      document.getElementById('printBtn').onclick = () => window.open(viewLink, '_blank');
-      document.getElementById('downloadBtn').onclick = () => window.open(publicDownload, '_blank');
-
-      // save a tiny preview locally so uploader can view quickly
-      if (parsedEvents) localStorage.setItem('altura_preview', JSON.stringify({ name, fileId, tz: scheduleTz }));
+      document.getElementById('copyBtn').onclick = ()=> navigator.clipboard.writeText(viewLink).then(()=> alert('Copied link'));
     } catch (err) {
       console.error(err);
       alert('Upload failed: ' + (err.message || JSON.stringify(err)));
@@ -172,26 +117,15 @@
 
   clearLocal.addEventListener('click', ()=> {
     localStorage.removeItem('altura_preview');
-    previewArea.textContent = 'Local preview cleared';
+    alert('Local data cleared');
   });
 
   toggleDark.addEventListener('click', ()=> {
     document.documentElement.classList.toggle('dark');
-    // simple dark toggle: invert background
-    if (document.documentElement.classList.contains('dark')) {
-      document.body.style.background = '#021712';
-    } else {
-      document.body.style.background = 'linear-gradient(180deg,#2a9078 0%, #1f6f5b 70%)';
-    }
+    document.body.style.background = document.documentElement.classList.contains('dark')
+      ? '#021712'
+      : 'linear-gradient(180deg,#2a9078 0%, #1f6f5b 70%)';
   });
-
-  // show last preview
-  (function loadSaved(){
-    try {
-      const v = JSON.parse(localStorage.getItem('altura_preview'));
-      if (v) previewArea.textContent = `Last preview: ${v.name} (ID ${v.fileId}) — timezone: ${v.tz}`;
-    } catch(e){ /* ignore */ }
-  })();
 </script>
 </body>
 </html>
