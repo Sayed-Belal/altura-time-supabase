@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>AlturaTime — Viewer (fixed timezone & recurrence)</title>
+  <title>AlturaTime — Viewer</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=Lato:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -16,9 +16,8 @@
     .time { font-size:2rem; font-weight:700; color:#2a9078 }
     .call-status.safe { background:#5fb878; color:#fff; padding:6px 10px; border-radius:6px; display:inline-block }
     .call-status.avoid { background:#ef476f; color:#fff; padding:6px 10px; border-radius:6px; display:inline-block }
-    .call-status.maybe { background:#ffd166; color:#745800; padding:6px 10px; border-radius:6px; display:inline-block }
     .small { font-size:0.95em; color:#666; margin-top:6px }
-    #debug { text-align:left; margin-top:12px; color:#666; font-size:0.85rem; max-width:900px; margin-left:auto; margin-right:auto; }
+    #debug { text-align:left; margin-top:12px; color:#666; font-size:0.85rem; max-width:900px; margin-left:auto; margin-right:auto; display:none; }
   </style>
 </head>
 <body>
@@ -28,33 +27,34 @@
     <div id="viewerCard" class="card">
       <div class="city-label" id="cityLabel">Loading schedule...</div>
       <div class="time" id="timeDisplay">--:--</div>
-      <div style="margin-top:8px"><span id="statusBadge" class="call-status maybe">--</span></div>
+      <div style="margin-top:8px"><span id="statusBadge" class="call-status">--</span></div>
       <div id="nextInfo" class="small"></div>
     </div>
 
-    <div id="debug" aria-hidden="true"></div>
+    <div id="debug"></div>
   </div>
 
 <script>
 /* -------------------------
-  CONFIG - replace with your Supabase details
-   - keep anon key here since bucket is public by policy
-   - SUPABASE_URL example: "https://abcxyz.supabase.co"
+   CONFIG - replace with your Supabase details
 ------------------------- */
-const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co"; // <-- your project URL
-const SUPABASE_KEY = "YOUR_ANON_KEY_HERE";                        // <-- your anon key
+const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co"; // your Supabase project URL
+const SUPABASE_KEY = "YOUR_ANON_KEY_HERE";                        // your Supabase anon key
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* --------- helper DOM refs --------- */
+/* DOM refs */
 const params = new URLSearchParams(location.search);
 const fileId = params.get("id");
 const name = params.get("name") || "Student";
-
 const cityLabel = document.getElementById("cityLabel");
 const timeDisplay = document.getElementById("timeDisplay");
 const statusBadge = document.getElementById("statusBadge");
 const nextInfo = document.getElementById("nextInfo");
 const debugEl = document.getElementById("debug");
+
+if (params.get("debug") === "1") {
+  debugEl.style.display = "block";
+}
 
 if (!fileId) {
   cityLabel.innerText = "Missing schedule id (use the share link).";
@@ -62,76 +62,56 @@ if (!fileId) {
 }
 cityLabel.innerText = `${decodeURIComponent(name)}'s Schedule`;
 
-/* format an instant for display using schedule timezone only (no timezone math here) */
+/* helpers */
 function formatTimeInTZ(date, tz) {
-  return date.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12: true, timeZone: tz });
+  return date.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12:true, timeZone: tz });
 }
-
-/* get hour (0-23) in schedule timezone using Intl — works for all clients */
 function getHourInTZ(date, tz) {
-  const fmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz });
-  const s = fmt.format(date); // returns e.g. "5" or "17"
-  return parseInt(s, 10);
+  const fmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12:false, timeZone: tz });
+  return parseInt(fmt.format(date), 10);
 }
 
-/* main loader */
 async function loadScheduleAndRender() {
-  // 1) request public URL from supabase
   const { data, error } = supabase.storage.from("schedules").getPublicUrl(`${fileId}.ics`);
   if (error || !data?.publicUrl) {
     cityLabel.innerText = "Schedule not found";
-    debugEl.innerText = "Failed to get publicUrl: " + (error ? error.message : "no publicUrl");
     return;
   }
-
   const res = await fetch(data.publicUrl);
   if (!res.ok) {
     cityLabel.innerText = "Schedule fetch failed";
-    debugEl.innerText = `Fetch failed: ${res.status}`;
     return;
   }
   const icsText = await res.text();
 
-  // 2) parse calendar
   const jcal = ICAL.parse(icsText);
   const comp = new ICAL.Component(jcal);
 
-  // prefer X-WR-TIMEZONE, otherwise check VTIMEZONE tzid
-  let tz = comp.getFirstPropertyValue && comp.getFirstPropertyValue('x-wr-timezone');
+  let tz = comp.getFirstPropertyValue('x-wr-timezone');
   if (!tz) {
     const tzComp = comp.getFirstSubcomponent('vtimezone');
     if (tzComp) tz = tzComp.getFirstPropertyValue('tzid');
   }
   tz = tz || 'UTC';
 
-  // 3) produce a list of concrete occurrences (start,end,summary) within a reasonable window
-  const nowMs = Date.now();                       // absolute now (UTC epoch ms)
-  const rangeStart = new Date(nowMs - 24*3600*1000);   // include 24h back to capture running events
-  const rangeEnd   = new Date(nowMs + 14*24*3600*1000); // 14 days ahead - adjust if you need longer
+  const nowMs = Date.now();
+  const rangeStart = new Date(nowMs - 24*3600*1000);
+  const rangeEnd   = new Date(nowMs + 14*24*3600*1000);
 
   const vevents = comp.getAllSubcomponents('vevent') || [];
   const occurrences = [];
-
   for (const v of vevents) {
     try {
       const ev = new ICAL.Event(v);
-
-      // duration fallback: compute from end - start (ms)
       let durMs = 0;
       try {
         durMs = ev.endDate.toJSDate().getTime() - ev.startDate.toJSDate().getTime();
-      } catch (e) {
-        durMs = 0;
-      }
-
+      } catch {}
       const hasRrule = v.getFirstProperty('rrule') !== null;
       const hasRdate = v.getFirstProperty('rdate') !== null;
-
       if (hasRrule || hasRdate) {
-        // use RecurExpansion to generate occurrence start times; it respects EXDATE/RECURRENCE-ID
         const dtstart = ev.startDate;
-        const exp = new ICAL.RecurExpansion({ component: v, dtstart });
-
+        const exp = new ICAL.RecurExpansion({ component:v, dtstart });
         let next;
         while ((next = exp.next())) {
           const occStart = next.toJSDate();
@@ -146,51 +126,41 @@ async function loadScheduleAndRender() {
         }
       } else {
         const s = ev.startDate.toJSDate();
-        const e = ev.endDate ? ev.endDate.toJSDate() : new Date(s.getTime() + durMs);
+        const e = ev.endDate ? ev.endDate.toJSDate() : new Date(s.getTime()+durMs);
         if (e >= rangeStart && s <= rangeEnd) {
-          occurrences.push({ start: s, end: e, summary: ev.summary || '' });
+          occurrences.push({ start:s, end:e, summary:ev.summary || '' });
         }
       }
-    } catch (e) {
-      console.warn('skip event', e);
+    } catch {}
+  }
+  occurrences.sort((a,b)=>a.start-b.start);
+
+  if (params.get("debug")==="1") {
+    debugEl.innerHTML = '<strong>Upcoming (schedule timezone):</strong><br>';
+    for (let i=0;i<Math.min(10,occurrences.length);i++) {
+      const o = occurrences[i];
+      debugEl.innerHTML += `${o.summary} — ${o.start.toLocaleString('en-US',{timeZone:tz})} to ${o.end.toLocaleString('en-US',{timeZone:tz})}<br>`;
     }
   }
 
-  // sort occurrences by absolute start time
-  occurrences.sort((a,b) => a.start.getTime() - b.start.getTime());
-
-  // debug: list first few occurrences (in schedule tz) so you can confirm correctness
-  debugEl.innerHTML = '<strong>Upcoming occurrences (schedule timezone):</strong><br>';
-  if (occurrences.length === 0) debugEl.innerHTML += '(no occurrences in 14-day window)';
-  for (let i=0;i<Math.min(12, occurrences.length); i++) {
-    const o = occurrences[i];
-    debugEl.innerHTML += `${o.summary} — ${o.start.toLocaleString('en-US',{timeZone: tz})} to ${o.end.toLocaleString('en-US',{timeZone: tz})}<br>`;
-  }
-
-  // find if now is inside any occurrence (absolute ms)
   const now = new Date();
-  const nowMs2 = now.getTime();
-  const inOcc = occurrences.find(o => nowMs2 >= o.start.getTime() && nowMs2 <= o.end.getTime());
-  const nextOcc = occurrences.find(o => o.start.getTime() > nowMs2) || null;
+  const inOcc = occurrences.find(o=> now>=o.start && now<=o.end);
+  const nextOcc = occurrences.find(o=> o.start>now);
 
-  // display clock in schedule timezone for readability
   timeDisplay.textContent = formatTimeInTZ(new Date(), tz);
+  const hourInTz = getHourInTZ(new Date(), tz);
+  const isNight = (hourInTz < 7) || (hourInTz >= 21);
 
-  // compute hour in schedule timezone reliably (0-23)
-  const hourInScheduleTz = getHourInTZ(new Date(), tz);
-  const isNight = (hourInScheduleTz < 7) || (hourInScheduleTz >= 21);
-
-  // decide status with correct priority
   if (inOcc) {
     statusBadge.className = 'call-status avoid';
     statusBadge.textContent = 'CLASS IN SESSION';
-    const minsLeft = Math.max(0, Math.round((inOcc.end.getTime() - nowMs2)/60000));
+    const minsLeft = Math.max(0,Math.round((inOcc.end-now)/60000));
     nextInfo.textContent = `${inOcc.summary} — ends in ${Math.floor(minsLeft/60)>0 ? Math.floor(minsLeft/60)+' hr ' : ''}${minsLeft%60} min`;
   } else if (isNight) {
     statusBadge.className = 'call-status avoid';
     statusBadge.textContent = 'AVOID CALLING';
     if (nextOcc) {
-      const mins = Math.round((nextOcc.start.getTime() - nowMs2)/60000);
+      const mins = Math.round((nextOcc.start-now)/60000);
       nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0 ? Math.floor(mins/60)+' hr ' : ''}${mins%60} min`;
     } else {
       nextInfo.textContent = 'No upcoming classes found.';
@@ -199,24 +169,15 @@ async function loadScheduleAndRender() {
     statusBadge.className = 'call-status safe';
     statusBadge.textContent = 'GOOD TO CALL';
     if (nextOcc) {
-      const mins = Math.round((nextOcc.start.getTime() - nowMs2)/60000);
+      const mins = Math.round((nextOcc.start-now)/60000);
       nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0 ? Math.floor(mins/60)+' hr ' : ''}${mins%60} min`;
     } else {
       nextInfo.textContent = 'No upcoming classes found.';
     }
   }
-
-  // refresh display clock every 30s (display only)
-  setInterval(() => {
-    timeDisplay.textContent = formatTimeInTZ(new Date(), tz);
-  }, 30000);
+  setInterval(()=>{ timeDisplay.textContent=formatTimeInTZ(new Date(), tz); },30000);
 }
-
-loadScheduleAndRender().catch(err => {
-  cityLabel.innerText = 'Failed to load schedule';
-  debugEl.innerText = String(err);
-  console.error(err);
-});
+loadScheduleAndRender();
 </script>
 </body>
 </html>
