@@ -14,8 +14,8 @@
     .card { background:white; border-radius:10px; padding:18px; box-shadow:0 6px 18px rgba(0,0,0,0.06); margin:20px auto; text-align:center }
     .city-label { font-weight:bold; color:#e27d60; margin-bottom:6px }
     .time { font-size:2rem; font-weight:700; color:#2a9078 }
-    .call-status.safe { background:#5fb878; color:#fff; padding:6px 10px; border-radius:6px; display:inline-block }
-    .call-status.avoid { background:#ef476f; color:#fff; padding:6px 10px; border-radius:6px; display:inline-block }
+    .call-status.safe { background:#5fb878; color:#fff; padding:6px 12px; border-radius:8px; display:inline-block }
+    .call-status.avoid { background:#ef476f; color:#fff; padding:6px 12px; border-radius:8px; display:inline-block }
     .small { font-size:0.95em; color:#666; margin-top:6px }
     #debug { text-align:left; margin-top:12px; color:#666; font-size:0.85rem; max-width:900px; margin-left:auto; margin-right:auto; display:none; }
   </style>
@@ -39,7 +39,7 @@
    CONFIG - replace with your Supabase details
 ------------------------- */
 const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co"; // your Supabase project URL
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";                        // your Supabase anon key
+const SUPABASE_KEY = "YeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";                        // your Supabase anon key
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /* DOM refs */
@@ -71,6 +71,7 @@ function getHourInTZ(date, tz) {
   return parseInt(fmt.format(date), 10);
 }
 
+/* main loader */
 async function loadScheduleAndRender() {
   const { data, error } = supabase.storage.from("schedules").getPublicUrl(`${fileId}.ics`);
   if (error || !data?.publicUrl) {
@@ -114,7 +115,7 @@ async function loadScheduleAndRender() {
         const exp = new ICAL.RecurExpansion({ component:v, dtstart });
         let next;
         while ((next = exp.next())) {
-          const occStart = next.toJSDate();
+          const occStart = next.toJSDate(ICAL.TimezoneService.get(tz));
           if (occStart > rangeEnd) break;
           if (occStart >= rangeStart) {
             occurrences.push({
@@ -125,8 +126,8 @@ async function loadScheduleAndRender() {
           }
         }
       } else {
-        const s = ev.startDate.toJSDate();
-        const e = ev.endDate ? ev.endDate.toJSDate() : new Date(s.getTime()+durMs);
+        const s = ev.startDate.toJSDate(ICAL.TimezoneService.get(tz));
+        const e = ev.endDate ? ev.endDate.toJSDate(ICAL.TimezoneService.get(tz)) : new Date(s.getTime()+durMs);
         if (e >= rangeStart && s <= rangeEnd) {
           occurrences.push({ start:s, end:e, summary:ev.summary || '' });
         }
@@ -181,4 +182,3 @@ loadScheduleAndRender();
 </script>
 </body>
 </html>
-
