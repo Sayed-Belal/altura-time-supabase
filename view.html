@@ -7,7 +7,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=Lato:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/ical.js@1.4.0/build/ical.min.js"></script>
-  <!-- Load Luxon for timezone handling -->
   <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.3/build/global/luxon.min.js"></script>
   <style>
     body { font-family:'Lato',sans-serif; background:#f8fafb; margin:0; padding:20px; color:#203040; }
@@ -20,6 +19,9 @@
     .call-status.avoid { background:#ef476f; color:#fff; padding:6px 12px; border-radius:8px; display:inline-block }
     .small { font-size:0.95em; color:#666; margin-top:6px }
     #debug { text-align:left; margin-top:12px; color:#666; font-size:0.85rem; max-width:900px; margin-left:auto; margin-right:auto; display:none; }
+    .event-debug { background:#f0f4f8; border-radius:6px; margin:6px 0; padding:4px 8px; font-size:0.93em; }
+    .event-debug strong { color:#2a9078; }
+    .error { color: #ef476f; }
   </style>
 </head>
 <body>
@@ -35,14 +37,10 @@
   </div>
 
 <script>
-/* -------------------------
-   CONFIG - replace with your Supabase details
-------------------------- */
 const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
 const SUPABASE_KEY = "YeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* DOM refs */
 const params = new URLSearchParams(location.search);
 const fileId = params.get("id");
 const name = params.get("name") || "Student";
@@ -62,7 +60,6 @@ if (!fileId) {
 }
 cityLabel.innerText = `${decodeURIComponent(name)}'s Schedule`;
 
-/* helpers */
 function formatTimeInTZ(dt, tz) {
   return window.luxon.DateTime.fromJSDate(dt, {zone: tz}).toLocaleString(window.luxon.DateTime.TIME_SIMPLE);
 }
@@ -73,51 +70,60 @@ function getNowInTZ(tz) {
   return window.luxon.DateTime.now().setZone(tz);
 }
 function icalTimeToLuxon(icalTime, tzid) {
-  // All-day event
   if (icalTime.isDate) {
     return window.luxon.DateTime.fromISO(icalTime.toString(), {zone: tzid});
   }
-  // If the ICAL.Time has its own zone, use it
   if (icalTime.zone && icalTime.zone.tzid) {
     return window.luxon.DateTime.fromJSDate(icalTime.toJSDate(), {zone: icalTime.zone.tzid});
   }
-  // Otherwise, use the ICS tzid
   return window.luxon.DateTime.fromJSDate(icalTime.toJSDate(), {zone: tzid});
 }
 
-/* main loader */
 async function loadScheduleAndRender() {
-  // Correct usage: getPublicUrl returns {data, error} synchronously.
   const { data, error } = supabase.storage.from("schedules").getPublicUrl(`${fileId}.ics`);
   if (error || !data?.publicUrl) {
     cityLabel.innerText = "Schedule not found";
+    if (params.get("debug")==="1") debugEl.innerHTML = `<div class="error">Supabase error: ${error?.message || "Unknown"}</div>`;
     return;
   }
   const res = await fetch(data.publicUrl);
   if (!res.ok) {
     cityLabel.innerText = "Schedule fetch failed";
+    if (params.get("debug")==="1") debugEl.innerHTML = `<div class="error">Fetch error: ${res.status}</div>`;
     return;
   }
   const icsText = await res.text();
 
-  const jcal = ICAL.parse(icsText);
-  const comp = new ICAL.Component(jcal);
-
-  // Extract timezone from X-WR-TIMEZONE or VTIMEZONE
-  let tz = comp.getFirstPropertyValue('x-wr-timezone');
-  if (!tz) {
-    const tzComp = comp.getFirstSubcomponent('vtimezone');
-    if (tzComp) tz = tzComp.getFirstPropertyValue('tzid');
+  let jcal, comp, tz;
+  try {
+    jcal = ICAL.parse(icsText);
+    comp = new ICAL.Component(jcal);
+    tz = comp.getFirstPropertyValue('x-wr-timezone');
+    if (!tz) {
+      const tzComp = comp.getFirstSubcomponent('vtimezone');
+      if (tzComp) tz = tzComp.getFirstPropertyValue('tzid');
+    }
+    tz = tz || 'UTC';
+  } catch (err) {
+    if (params.get("debug")==="1") debugEl.innerHTML = `<div class="error">ICS parse error: ${err}</div>`;
+    return;
   }
-  tz = tz || 'UTC';
 
   // Use Luxon for all date comparisons
-  const nowTz = getNowInTZ(tz);
-  const rangeStart = nowTz.minus({days: 1});
-  const rangeEnd = nowTz.plus({days: 14});
+  let nowTz = getNowInTZ(tz);
+  let rangeStart = nowTz.minus({days: 1});
+  let rangeEnd = nowTz.plus({days: 14});
+
+  // Debug: print schedule timezone and now
+  if (params.get("debug")==="1") {
+    debugEl.innerHTML += `<div><strong>Schedule timezone:</strong> ${tz}</div>`;
+    debugEl.innerHTML += `<div><strong>Current time in schedule timezone:</strong> ${nowTz.toFormat("yyyy-MM-dd HH:mm:ss")}</div>`;
+    debugEl.innerHTML += `<div><strong>Range start:</strong> ${rangeStart.toFormat("yyyy-MM-dd HH:mm")}, <strong>Range end:</strong> ${rangeEnd.toFormat("yyyy-MM-dd HH:mm")}</div>`;
+  }
 
   const vevents = comp.getAllSubcomponents('vevent') || [];
   const occurrences = [];
+  let debugEvents = [];
 
   for (const v of vevents) {
     try {
@@ -129,24 +135,33 @@ async function loadScheduleAndRender() {
       const hasRrule = v.getFirstProperty('rrule') !== null;
       const hasRdate = v.getFirstProperty('rdate') !== null;
       if (hasRrule || hasRdate) {
-        // Expand recurrences using ICAL.RecurExpansion
         const dtstart = ev.startDate;
         const exp = new ICAL.RecurExpansion({ component: v, dtstart });
         let next;
+        let expandCount = 0;
         while ((next = exp.next())) {
-          // next is ICAL.Time
+          expandCount++;
           const occStartLuxon = icalTimeToLuxon(next, tz);
+          const occEndLuxon = occStartLuxon.plus({milliseconds: durMs});
+          debugEvents.push({
+            summary: ev.summary || '',
+            start: occStartLuxon,
+            end: occEndLuxon,
+            rawStart: next.toString(),
+            rawEnd: occEndLuxon.toFormat("yyyy-MM-dd HH:mm"),
+            rrule: v.getFirstPropertyValue('rrule'),
+            uid: v.getFirstPropertyValue('uid')
+          });
           if (occStartLuxon > rangeEnd) break;
-          if (occStartLuxon >= rangeStart) {
+          if (occEndLuxon >= rangeStart && occStartLuxon <= rangeEnd) {
             occurrences.push({
               start: occStartLuxon,
-              end: occStartLuxon.plus({milliseconds: durMs}),
+              end: occEndLuxon,
               summary: ev.summary || ''
             });
           }
         }
       } else {
-        // Single event
         const sLuxon = icalTimeToLuxon(ev.startDate, tz);
         let eLuxon;
         if (ev.endDate) {
@@ -154,22 +169,47 @@ async function loadScheduleAndRender() {
         } else {
           eLuxon = sLuxon.plus({milliseconds: durMs});
         }
+        debugEvents.push({
+          summary: ev.summary || '',
+          start: sLuxon,
+          end: eLuxon,
+          rawStart: ev.startDate.toString(),
+          rawEnd: eLuxon.toFormat("yyyy-MM-dd HH:mm"),
+          rrule: null,
+          uid: v.getFirstPropertyValue('uid')
+        });
         if (eLuxon >= rangeStart && sLuxon <= rangeEnd) {
           occurrences.push({ start: sLuxon, end: eLuxon, summary: ev.summary || '' });
         }
       }
     } catch (err) {
-      if (params.get("debug")==="1") debugEl.innerHTML += "Error event: "+err+"<br>";
+      if (params.get("debug")==="1") debugEl.innerHTML += `<div class="error">Event parse error: ${err}</div>`;
     }
   }
   occurrences.sort((a,b)=>a.start-b.start);
 
-  // Debug output
+  // Debug output: show ALL parsed event instances, not just range
   if (params.get("debug")==="1") {
-    debugEl.innerHTML = '<strong>Upcoming (schedule timezone):</strong><br>';
-    for (let i=0;i<Math.min(10,occurrences.length);i++) {
+    debugEl.innerHTML += `<div><strong>All expanded events (in schedule timezone):</strong></div>`;
+    for (let i=0;i<debugEvents.length;i++) {
+      const o = debugEvents[i];
+      debugEl.innerHTML += `<div class="event-debug">
+        <strong>${o.summary}</strong><br>
+        Start: <span>${o.start.toFormat("yyyy-MM-dd HH:mm")}</span>
+        End: <span>${o.end.toFormat("yyyy-MM-dd HH:mm")}</span><br>
+        Raw DTSTART: <code>${o.rawStart}</code><br>
+        RRULE: <code>${o.rrule || ''}</code><br>
+        UID: <code>${o.uid}</code>
+      </div>`;
+    }
+    debugEl.innerHTML += `<div><strong>Upcoming occurrences (within range):</strong> (${occurrences.length})</div>`;
+    for (let i=0;i<occurrences.length;i++) {
       const o = occurrences[i];
-      debugEl.innerHTML += `${o.summary} — ${o.start.toFormat("fff")} to ${o.end.toFormat("fff")}<br>`;
+      debugEl.innerHTML += `<div class="event-debug">
+        <strong>${o.summary}</strong><br>
+        Start: <span>${o.start.toFormat("yyyy-MM-dd HH:mm")}</span>
+        End: <span>${o.end.toFormat("yyyy-MM-dd HH:mm")}</span>
+      </div>`;
     }
   }
 
@@ -178,20 +218,16 @@ async function loadScheduleAndRender() {
   const inOcc = occurrences.find(o=> now>=o.start && now<=o.end);
   const nextOcc = occurrences.find(o=> o.start>now);
 
-  // Show the clock in the student's timezone
   function updateClock() {
     now = getNowInTZ(tz);
     timeDisplay.textContent = now.toLocaleString(window.luxon.DateTime.TIME_SIMPLE);
-    // Optionally: update status as well, if you want countdown to be live
     updateStatus();
   }
 
-  // Determine status
   function updateStatus() {
     const hourInTz = now.hour;
     const isNight = (hourInTz < 7) || (hourInTz >= 21);
 
-    // Find current/next event in the student timezone (recalculate for live updates)
     const currentOcc = occurrences.find(o=> now>=o.start && now<=o.end);
     const nextOccur = occurrences.find(o=> o.start>now);
 
@@ -222,8 +258,8 @@ async function loadScheduleAndRender() {
   }
 
   updateClock();
-  setInterval(updateClock, 30000); // Update clock and status every 30s
-  updateStatus(); // Initial status
+  setInterval(updateClock, 30000);
+  updateStatus();
 }
 loadScheduleAndRender();
 </script>
