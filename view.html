@@ -7,6 +7,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=Lato:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/ical.js@1.4.0/build/ical.min.js"></script>
+  <!-- Load Luxon for timezone handling -->
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.3/build/global/luxon.min.js"></script>
   <style>
     body { font-family:'Lato',sans-serif; background:#f8fafb; margin:0; padding:20px; color:#203040; }
     .main-title { font-family:'Nunito',sans-serif; font-size:2.2em; color:#2a9078; font-weight:900; text-align:center; }
@@ -23,14 +25,12 @@
 <body>
   <div class="container">
     <div class="main-title">AlturaTime</div>
-
     <div id="viewerCard" class="card">
       <div class="city-label" id="cityLabel">Loading schedule...</div>
       <div class="time" id="timeDisplay">--:--</div>
       <div style="margin-top:8px"><span id="statusBadge" class="call-status">--</span></div>
       <div id="nextInfo" class="small"></div>
     </div>
-
     <div id="debug"></div>
   </div>
 
@@ -62,161 +62,149 @@ if (!fileId) {
 }
 cityLabel.innerText = `${decodeURIComponent(name)}'s Schedule`;
 
-/* helpers - use Luxon for robust timezone handling */
-function loadLuxon(callback) {
-  if (window.luxon) return callback();
-  const s = document.createElement("script");
-  s.src = "https://cdn.jsdelivr.net/npm/luxon@3.4.3/build/global/luxon.min.js";
-  s.onload = callback;
-  document.head.appendChild(s);
-}
-
-// format time in the student's tz using Luxon
+/* helpers */
 function formatTimeInTZ(dt, tz) {
-  return window.luxon.DateTime.fromJSDate(dt, {zone: tz})
-    .toLocaleString(window.luxon.DateTime.TIME_SIMPLE);
+  return window.luxon.DateTime.fromJSDate(dt, {zone: tz}).toLocaleString(window.luxon.DateTime.TIME_SIMPLE);
 }
-
-// get hour in the student's tz using Luxon
 function getHourInTZ(dt, tz) {
   return window.luxon.DateTime.fromJSDate(dt, {zone: tz}).hour;
 }
-
-// get "now" in the student's timezone
 function getNowInTZ(tz) {
   return window.luxon.DateTime.now().setZone(tz);
 }
-
-// Convert ICAL.Time to JS Date in correct timezone
 function icalTimeToLuxon(icalTime, tzid) {
+  // All-day event
   if (icalTime.isDate) {
-    // All-day event, treat as 00:00 in tz
     return window.luxon.DateTime.fromISO(icalTime.toString(), {zone: tzid});
   }
+  // If the ICAL.Time has its own zone, use it
   if (icalTime.zone && icalTime.zone.tzid) {
-    // Use the zone from the ICAL.Time object
     return window.luxon.DateTime.fromJSDate(icalTime.toJSDate(), {zone: icalTime.zone.tzid});
   }
-  // Otherwise, use ICS tzid
+  // Otherwise, use the ICS tzid
   return window.luxon.DateTime.fromJSDate(icalTime.toJSDate(), {zone: tzid});
 }
 
 /* main loader */
-function loadScheduleAndRender() {
-  supabase.storage.from("schedules").getPublicUrl(`${fileId}.ics`).then(async ({ data, error }) => {
-    if (error || !data?.publicUrl) {
-      cityLabel.innerText = "Schedule not found";
-      return;
-    }
-    const res = await fetch(data.publicUrl);
-    if (!res.ok) {
-      cityLabel.innerText = "Schedule fetch failed";
-      return;
-    }
-    const icsText = await res.text();
+async function loadScheduleAndRender() {
+  // Correct usage: getPublicUrl returns {data, error} synchronously.
+  const { data, error } = supabase.storage.from("schedules").getPublicUrl(`${fileId}.ics`);
+  if (error || !data?.publicUrl) {
+    cityLabel.innerText = "Schedule not found";
+    return;
+  }
+  const res = await fetch(data.publicUrl);
+  if (!res.ok) {
+    cityLabel.innerText = "Schedule fetch failed";
+    return;
+  }
+  const icsText = await res.text();
 
-    const jcal = ICAL.parse(icsText);
-    const comp = new ICAL.Component(jcal);
+  const jcal = ICAL.parse(icsText);
+  const comp = new ICAL.Component(jcal);
 
-    // Extract timezone from X-WR-TIMEZONE or VTIMEZONE
-    let tz = comp.getFirstPropertyValue('x-wr-timezone');
-    if (!tz) {
-      const tzComp = comp.getFirstSubcomponent('vtimezone');
-      if (tzComp) tz = tzComp.getFirstPropertyValue('tzid');
-    }
-    tz = tz || 'UTC';
+  // Extract timezone from X-WR-TIMEZONE or VTIMEZONE
+  let tz = comp.getFirstPropertyValue('x-wr-timezone');
+  if (!tz) {
+    const tzComp = comp.getFirstSubcomponent('vtimezone');
+    if (tzComp) tz = tzComp.getFirstPropertyValue('tzid');
+  }
+  tz = tz || 'UTC';
 
-    // Use Luxon for all date comparisons
-    const nowTz = getNowInTZ(tz);
-    const rangeStart = nowTz.minus({days: 1});
-    const rangeEnd = nowTz.plus({days: 14});
+  // Use Luxon for all date comparisons
+  const nowTz = getNowInTZ(tz);
+  const rangeStart = nowTz.minus({days: 1});
+  const rangeEnd = nowTz.plus({days: 14});
 
-    const vevents = comp.getAllSubcomponents('vevent') || [];
-    const occurrences = [];
+  const vevents = comp.getAllSubcomponents('vevent') || [];
+  const occurrences = [];
 
-    for (const v of vevents) {
+  for (const v of vevents) {
+    try {
+      const ev = new ICAL.Event(v);
+      let durMs = 0;
       try {
-        const ev = new ICAL.Event(v);
-        let durMs = 0;
-        try {
-          durMs = ev.endDate.toJSDate().getTime() - ev.startDate.toJSDate().getTime();
-        } catch {}
-        const hasRrule = v.getFirstProperty('rrule') !== null;
-        const hasRdate = v.getFirstProperty('rdate') !== null;
-        if (hasRrule || hasRdate) {
-          // Expand recurrences using ICAL.RecurExpansion
-          const dtstart = ev.startDate;
-          const exp = new ICAL.RecurExpansion({ component: v, dtstart });
-          let next;
-          while ((next = exp.next())) {
-            // next is ICAL.Time
-            const occStartLuxon = icalTimeToLuxon(next, tz);
-            if (occStartLuxon > rangeEnd) break;
-            if (occStartLuxon >= rangeStart) {
-              occurrences.push({
-                start: occStartLuxon,
-                end: occStartLuxon.plus({milliseconds: durMs}),
-                summary: ev.summary || ''
-              });
-            }
-          }
-        } else {
-          // Single event
-          const sLuxon = icalTimeToLuxon(ev.startDate, tz);
-          let eLuxon;
-          if (ev.endDate) {
-            eLuxon = icalTimeToLuxon(ev.endDate, tz);
-          } else {
-            eLuxon = sLuxon.plus({milliseconds: durMs});
-          }
-          if (eLuxon >= rangeStart && sLuxon <= rangeEnd) {
-            occurrences.push({ start: sLuxon, end: eLuxon, summary: ev.summary || '' });
+        durMs = ev.endDate.toJSDate().getTime() - ev.startDate.toJSDate().getTime();
+      } catch {}
+      const hasRrule = v.getFirstProperty('rrule') !== null;
+      const hasRdate = v.getFirstProperty('rdate') !== null;
+      if (hasRrule || hasRdate) {
+        // Expand recurrences using ICAL.RecurExpansion
+        const dtstart = ev.startDate;
+        const exp = new ICAL.RecurExpansion({ component: v, dtstart });
+        let next;
+        while ((next = exp.next())) {
+          // next is ICAL.Time
+          const occStartLuxon = icalTimeToLuxon(next, tz);
+          if (occStartLuxon > rangeEnd) break;
+          if (occStartLuxon >= rangeStart) {
+            occurrences.push({
+              start: occStartLuxon,
+              end: occStartLuxon.plus({milliseconds: durMs}),
+              summary: ev.summary || ''
+            });
           }
         }
-      } catch (err) {
-        if (params.get("debug")==="1") debugEl.innerHTML += "Error event: "+err+"<br>";
+      } else {
+        // Single event
+        const sLuxon = icalTimeToLuxon(ev.startDate, tz);
+        let eLuxon;
+        if (ev.endDate) {
+          eLuxon = icalTimeToLuxon(ev.endDate, tz);
+        } else {
+          eLuxon = sLuxon.plus({milliseconds: durMs});
+        }
+        if (eLuxon >= rangeStart && sLuxon <= rangeEnd) {
+          occurrences.push({ start: sLuxon, end: eLuxon, summary: ev.summary || '' });
+        }
       }
+    } catch (err) {
+      if (params.get("debug")==="1") debugEl.innerHTML += "Error event: "+err+"<br>";
     }
-    occurrences.sort((a,b)=>a.start-b.start);
+  }
+  occurrences.sort((a,b)=>a.start-b.start);
 
-    // Debug output
-    if (params.get("debug")==="1") {
-      debugEl.innerHTML = '<strong>Upcoming (schedule timezone):</strong><br>';
-      for (let i=0;i<Math.min(10,occurrences.length);i++) {
-        const o = occurrences[i];
-        debugEl.innerHTML += `${o.summary} — ${o.start.toFormat("fff")} to ${o.end.toFormat("fff")}<br>`;
-      }
+  // Debug output
+  if (params.get("debug")==="1") {
+    debugEl.innerHTML = '<strong>Upcoming (schedule timezone):</strong><br>';
+    for (let i=0;i<Math.min(10,occurrences.length);i++) {
+      const o = occurrences[i];
+      debugEl.innerHTML += `${o.summary} — ${o.start.toFormat("fff")} to ${o.end.toFormat("fff")}<br>`;
     }
+  }
 
-    // Find current/next event in the student timezone
-    const now = nowTz;
-    const inOcc = occurrences.find(o=> now>=o.start && now<=o.end);
-    const nextOcc = occurrences.find(o=> o.start>now);
+  // Find current/next event in the student timezone
+  let now = nowTz;
+  const inOcc = occurrences.find(o=> now>=o.start && now<=o.end);
+  const nextOcc = occurrences.find(o=> o.start>now);
 
-    // Show the clock in the student's timezone
-    function updateClock() {
-      timeDisplay.textContent = now.setZone(tz).toLocaleString(window.luxon.DateTime.TIME_SIMPLE);
-    }
-    updateClock();
-    setInterval(() => {
-      const now = getNowInTZ(tz);
-      timeDisplay.textContent = now.toLocaleString(window.luxon.DateTime.TIME_SIMPLE);
-    }, 30000);
+  // Show the clock in the student's timezone
+  function updateClock() {
+    now = getNowInTZ(tz);
+    timeDisplay.textContent = now.toLocaleString(window.luxon.DateTime.TIME_SIMPLE);
+    // Optionally: update status as well, if you want countdown to be live
+    updateStatus();
+  }
 
-    // Determine status
+  // Determine status
+  function updateStatus() {
     const hourInTz = now.hour;
     const isNight = (hourInTz < 7) || (hourInTz >= 21);
 
-    if (inOcc) {
+    // Find current/next event in the student timezone (recalculate for live updates)
+    const currentOcc = occurrences.find(o=> now>=o.start && now<=o.end);
+    const nextOccur = occurrences.find(o=> o.start>now);
+
+    if (currentOcc) {
       statusBadge.className = 'call-status avoid';
       statusBadge.textContent = 'CLASS IN SESSION';
-      const minsLeft = Math.max(0, Math.round(inOcc.end.diff(now,"minutes").minutes));
-      nextInfo.textContent = `${inOcc.summary} — ends in ${Math.floor(minsLeft/60)>0 ? Math.floor(minsLeft/60)+' hr ' : ''}${minsLeft%60} min`;
+      const minsLeft = Math.max(0, Math.round(currentOcc.end.diff(now,"minutes").minutes));
+      nextInfo.textContent = `${currentOcc.summary} — ends in ${Math.floor(minsLeft/60)>0 ? Math.floor(minsLeft/60)+' hr ' : ''}${minsLeft%60} min`;
     } else if (isNight) {
       statusBadge.className = 'call-status avoid';
       statusBadge.textContent = 'AVOID CALLING';
-      if (nextOcc) {
-        const mins = Math.round(nextOcc.start.diff(now,"minutes").minutes);
+      if (nextOccur) {
+        const mins = Math.round(nextOccur.start.diff(now,"minutes").minutes);
         nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0 ? Math.floor(mins/60)+' hr ' : ''}${mins%60} min`;
       } else {
         nextInfo.textContent = 'No upcoming classes found.';
@@ -224,18 +212,20 @@ function loadScheduleAndRender() {
     } else {
       statusBadge.className = 'call-status safe';
       statusBadge.textContent = 'GOOD TO CALL';
-      if (nextOcc) {
-        const mins = Math.round(nextOcc.start.diff(now,"minutes").minutes);
+      if (nextOccur) {
+        const mins = Math.round(nextOccur.start.diff(now,"minutes").minutes);
         nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0 ? Math.floor(mins/60)+' hr ' : ''}${mins%60} min`;
       } else {
         nextInfo.textContent = 'No upcoming classes found.';
       }
     }
-  });
-}
+  }
 
-// Load Luxon for timezone handling, then load schedule logic
-loadLuxon(loadScheduleAndRender);
+  updateClock();
+  setInterval(updateClock, 30000); // Update clock and status every 30s
+  updateStatus(); // Initial status
+}
+loadScheduleAndRender();
 </script>
 </body>
 </html>
