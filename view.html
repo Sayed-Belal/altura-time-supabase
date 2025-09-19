@@ -38,8 +38,8 @@
 /* -------------------------
    CONFIG - replace with your Supabase details
 ------------------------- */
-const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co"; // your Supabase project URL
-const SUPABASE_KEY = "YeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";                        // your Supabase anon key
+const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
+const SUPABASE_KEY = "YeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /* DOM refs */
@@ -62,123 +62,180 @@ if (!fileId) {
 }
 cityLabel.innerText = `${decodeURIComponent(name)}'s Schedule`;
 
-/* helpers */
-function formatTimeInTZ(date, tz) {
-  return date.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12:true, timeZone: tz });
+/* helpers - use Luxon for robust timezone handling */
+function loadLuxon(callback) {
+  if (window.luxon) return callback();
+  const s = document.createElement("script");
+  s.src = "https://cdn.jsdelivr.net/npm/luxon@3.4.3/build/global/luxon.min.js";
+  s.onload = callback;
+  document.head.appendChild(s);
 }
-function getHourInTZ(date, tz) {
-  const fmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12:false, timeZone: tz });
-  return parseInt(fmt.format(date), 10);
+
+// format time in the student's tz using Luxon
+function formatTimeInTZ(dt, tz) {
+  return window.luxon.DateTime.fromJSDate(dt, {zone: tz})
+    .toLocaleString(window.luxon.DateTime.TIME_SIMPLE);
+}
+
+// get hour in the student's tz using Luxon
+function getHourInTZ(dt, tz) {
+  return window.luxon.DateTime.fromJSDate(dt, {zone: tz}).hour;
+}
+
+// get "now" in the student's timezone
+function getNowInTZ(tz) {
+  return window.luxon.DateTime.now().setZone(tz);
+}
+
+// Convert ICAL.Time to JS Date in correct timezone
+function icalTimeToLuxon(icalTime, tzid) {
+  if (icalTime.isDate) {
+    // All-day event, treat as 00:00 in tz
+    return window.luxon.DateTime.fromISO(icalTime.toString(), {zone: tzid});
+  }
+  if (icalTime.zone && icalTime.zone.tzid) {
+    // Use the zone from the ICAL.Time object
+    return window.luxon.DateTime.fromJSDate(icalTime.toJSDate(), {zone: icalTime.zone.tzid});
+  }
+  // Otherwise, use ICS tzid
+  return window.luxon.DateTime.fromJSDate(icalTime.toJSDate(), {zone: tzid});
 }
 
 /* main loader */
-async function loadScheduleAndRender() {
-  const { data, error } = supabase.storage.from("schedules").getPublicUrl(`${fileId}.ics`);
-  if (error || !data?.publicUrl) {
-    cityLabel.innerText = "Schedule not found";
-    return;
-  }
-  const res = await fetch(data.publicUrl);
-  if (!res.ok) {
-    cityLabel.innerText = "Schedule fetch failed";
-    return;
-  }
-  const icsText = await res.text();
+function loadScheduleAndRender() {
+  supabase.storage.from("schedules").getPublicUrl(`${fileId}.ics`).then(async ({ data, error }) => {
+    if (error || !data?.publicUrl) {
+      cityLabel.innerText = "Schedule not found";
+      return;
+    }
+    const res = await fetch(data.publicUrl);
+    if (!res.ok) {
+      cityLabel.innerText = "Schedule fetch failed";
+      return;
+    }
+    const icsText = await res.text();
 
-  const jcal = ICAL.parse(icsText);
-  const comp = new ICAL.Component(jcal);
+    const jcal = ICAL.parse(icsText);
+    const comp = new ICAL.Component(jcal);
 
-  let tz = comp.getFirstPropertyValue('x-wr-timezone');
-  if (!tz) {
-    const tzComp = comp.getFirstSubcomponent('vtimezone');
-    if (tzComp) tz = tzComp.getFirstPropertyValue('tzid');
-  }
-  tz = tz || 'UTC';
+    // Extract timezone from X-WR-TIMEZONE or VTIMEZONE
+    let tz = comp.getFirstPropertyValue('x-wr-timezone');
+    if (!tz) {
+      const tzComp = comp.getFirstSubcomponent('vtimezone');
+      if (tzComp) tz = tzComp.getFirstPropertyValue('tzid');
+    }
+    tz = tz || 'UTC';
 
-  const nowMs = Date.now();
-  const rangeStart = new Date(nowMs - 24*3600*1000);
-  const rangeEnd   = new Date(nowMs + 14*24*3600*1000);
+    // Use Luxon for all date comparisons
+    const nowTz = getNowInTZ(tz);
+    const rangeStart = nowTz.minus({days: 1});
+    const rangeEnd = nowTz.plus({days: 14});
 
-  const vevents = comp.getAllSubcomponents('vevent') || [];
-  const occurrences = [];
-  for (const v of vevents) {
-    try {
-      const ev = new ICAL.Event(v);
-      let durMs = 0;
+    const vevents = comp.getAllSubcomponents('vevent') || [];
+    const occurrences = [];
+
+    for (const v of vevents) {
       try {
-        durMs = ev.endDate.toJSDate().getTime() - ev.startDate.toJSDate().getTime();
-      } catch {}
-      const hasRrule = v.getFirstProperty('rrule') !== null;
-      const hasRdate = v.getFirstProperty('rdate') !== null;
-      if (hasRrule || hasRdate) {
-        const dtstart = ev.startDate;
-        const exp = new ICAL.RecurExpansion({ component:v, dtstart });
-        let next;
-        while ((next = exp.next())) {
-          const occStart = next.toJSDate(ICAL.TimezoneService.get(tz));
-          if (occStart > rangeEnd) break;
-          if (occStart >= rangeStart) {
-            occurrences.push({
-              start: occStart,
-              end: new Date(occStart.getTime() + durMs),
-              summary: ev.summary || ''
-            });
+        const ev = new ICAL.Event(v);
+        let durMs = 0;
+        try {
+          durMs = ev.endDate.toJSDate().getTime() - ev.startDate.toJSDate().getTime();
+        } catch {}
+        const hasRrule = v.getFirstProperty('rrule') !== null;
+        const hasRdate = v.getFirstProperty('rdate') !== null;
+        if (hasRrule || hasRdate) {
+          // Expand recurrences using ICAL.RecurExpansion
+          const dtstart = ev.startDate;
+          const exp = new ICAL.RecurExpansion({ component: v, dtstart });
+          let next;
+          while ((next = exp.next())) {
+            // next is ICAL.Time
+            const occStartLuxon = icalTimeToLuxon(next, tz);
+            if (occStartLuxon > rangeEnd) break;
+            if (occStartLuxon >= rangeStart) {
+              occurrences.push({
+                start: occStartLuxon,
+                end: occStartLuxon.plus({milliseconds: durMs}),
+                summary: ev.summary || ''
+              });
+            }
+          }
+        } else {
+          // Single event
+          const sLuxon = icalTimeToLuxon(ev.startDate, tz);
+          let eLuxon;
+          if (ev.endDate) {
+            eLuxon = icalTimeToLuxon(ev.endDate, tz);
+          } else {
+            eLuxon = sLuxon.plus({milliseconds: durMs});
+          }
+          if (eLuxon >= rangeStart && sLuxon <= rangeEnd) {
+            occurrences.push({ start: sLuxon, end: eLuxon, summary: ev.summary || '' });
           }
         }
-      } else {
-        const s = ev.startDate.toJSDate(ICAL.TimezoneService.get(tz));
-        const e = ev.endDate ? ev.endDate.toJSDate(ICAL.TimezoneService.get(tz)) : new Date(s.getTime()+durMs);
-        if (e >= rangeStart && s <= rangeEnd) {
-          occurrences.push({ start:s, end:e, summary:ev.summary || '' });
-        }
+      } catch (err) {
+        if (params.get("debug")==="1") debugEl.innerHTML += "Error event: "+err+"<br>";
       }
-    } catch {}
-  }
-  occurrences.sort((a,b)=>a.start-b.start);
-
-  if (params.get("debug")==="1") {
-    debugEl.innerHTML = '<strong>Upcoming (schedule timezone):</strong><br>';
-    for (let i=0;i<Math.min(10,occurrences.length);i++) {
-      const o = occurrences[i];
-      debugEl.innerHTML += `${o.summary} — ${o.start.toLocaleString('en-US',{timeZone:tz})} to ${o.end.toLocaleString('en-US',{timeZone:tz})}<br>`;
     }
-  }
+    occurrences.sort((a,b)=>a.start-b.start);
 
-  const now = new Date();
-  const inOcc = occurrences.find(o=> now>=o.start && now<=o.end);
-  const nextOcc = occurrences.find(o=> o.start>now);
+    // Debug output
+    if (params.get("debug")==="1") {
+      debugEl.innerHTML = '<strong>Upcoming (schedule timezone):</strong><br>';
+      for (let i=0;i<Math.min(10,occurrences.length);i++) {
+        const o = occurrences[i];
+        debugEl.innerHTML += `${o.summary} — ${o.start.toFormat("fff")} to ${o.end.toFormat("fff")}<br>`;
+      }
+    }
 
-  timeDisplay.textContent = formatTimeInTZ(new Date(), tz);
-  const hourInTz = getHourInTZ(new Date(), tz);
-  const isNight = (hourInTz < 7) || (hourInTz >= 21);
+    // Find current/next event in the student timezone
+    const now = nowTz;
+    const inOcc = occurrences.find(o=> now>=o.start && now<=o.end);
+    const nextOcc = occurrences.find(o=> o.start>now);
 
-  if (inOcc) {
-    statusBadge.className = 'call-status avoid';
-    statusBadge.textContent = 'CLASS IN SESSION';
-    const minsLeft = Math.max(0,Math.round((inOcc.end-now)/60000));
-    nextInfo.textContent = `${inOcc.summary} — ends in ${Math.floor(minsLeft/60)>0 ? Math.floor(minsLeft/60)+' hr ' : ''}${minsLeft%60} min`;
-  } else if (isNight) {
-    statusBadge.className = 'call-status avoid';
-    statusBadge.textContent = 'AVOID CALLING';
-    if (nextOcc) {
-      const mins = Math.round((nextOcc.start-now)/60000);
-      nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0 ? Math.floor(mins/60)+' hr ' : ''}${mins%60} min`;
+    // Show the clock in the student's timezone
+    function updateClock() {
+      timeDisplay.textContent = now.setZone(tz).toLocaleString(window.luxon.DateTime.TIME_SIMPLE);
+    }
+    updateClock();
+    setInterval(() => {
+      const now = getNowInTZ(tz);
+      timeDisplay.textContent = now.toLocaleString(window.luxon.DateTime.TIME_SIMPLE);
+    }, 30000);
+
+    // Determine status
+    const hourInTz = now.hour;
+    const isNight = (hourInTz < 7) || (hourInTz >= 21);
+
+    if (inOcc) {
+      statusBadge.className = 'call-status avoid';
+      statusBadge.textContent = 'CLASS IN SESSION';
+      const minsLeft = Math.max(0, Math.round(inOcc.end.diff(now,"minutes").minutes));
+      nextInfo.textContent = `${inOcc.summary} — ends in ${Math.floor(minsLeft/60)>0 ? Math.floor(minsLeft/60)+' hr ' : ''}${minsLeft%60} min`;
+    } else if (isNight) {
+      statusBadge.className = 'call-status avoid';
+      statusBadge.textContent = 'AVOID CALLING';
+      if (nextOcc) {
+        const mins = Math.round(nextOcc.start.diff(now,"minutes").minutes);
+        nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0 ? Math.floor(mins/60)+' hr ' : ''}${mins%60} min`;
+      } else {
+        nextInfo.textContent = 'No upcoming classes found.';
+      }
     } else {
-      nextInfo.textContent = 'No upcoming classes found.';
+      statusBadge.className = 'call-status safe';
+      statusBadge.textContent = 'GOOD TO CALL';
+      if (nextOcc) {
+        const mins = Math.round(nextOcc.start.diff(now,"minutes").minutes);
+        nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0 ? Math.floor(mins/60)+' hr ' : ''}${mins%60} min`;
+      } else {
+        nextInfo.textContent = 'No upcoming classes found.';
+      }
     }
-  } else {
-    statusBadge.className = 'call-status safe';
-    statusBadge.textContent = 'GOOD TO CALL';
-    if (nextOcc) {
-      const mins = Math.round((nextOcc.start-now)/60000);
-      nextInfo.textContent = `Next class in ${Math.floor(mins/60)>0 ? Math.floor(mins/60)+' hr ' : ''}${mins%60} min`;
-    } else {
-      nextInfo.textContent = 'No upcoming classes found.';
-    }
-  }
-  setInterval(()=>{ timeDisplay.textContent=formatTimeInTZ(new Date(), tz); },30000);
+  });
 }
-loadScheduleAndRender();
+
+// Load Luxon for timezone handling, then load schedule logic
+loadLuxon(loadScheduleAndRender);
 </script>
 </body>
 </html>
