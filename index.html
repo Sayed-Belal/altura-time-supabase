@@ -207,7 +207,8 @@
         }
 
         // Build viewer link
-        const link = `${window.location.origin}/view.html?id=${fileId}&name=${encodeURIComponent(studentName)}`;
+        const base = window.location.origin + window.location.pathname.replace(/index\.html$/, '');
+const link = `${base}view.html?id=${fileId}&name=${encodeURIComponent(studentName)}`;
         shareLink.href = link;
         shareLink.textContent = link;
         shareLink.style.display = "block";
@@ -218,4 +219,5 @@
   </script>
 </body>
 </html>
+
 
