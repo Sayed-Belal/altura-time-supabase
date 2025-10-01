@@ -125,51 +125,31 @@
   <!-- ical.js for ICS parsing -->
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
   <script type="module">
-    // === USER: FILL IN YOUR SUPABASE INFO ===
+    // === SUPABASE INFO ===
     const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
     const SUPABASE_BUCKET = "schedules";
 
-    // Helper for robust date/time conversion in student's timezone
-    function getNowInTz(tzid) {
-      // Use DateTimeFormat to get year/month/day/hour/minute/second in tzid
-      const now = new Date();
-      const parts = new Intl.DateTimeFormat('en-US', {
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-        hour12: false, timeZone: tzid
-      }).formatToParts(now);
-      function part(type) { return parseInt(parts.find(p => p.type === type).value, 10); }
-      return new ICAL.Time({
-        year: part('year'),
-        month: part('month'),
-        day: part('day'),
-        hour: part('hour'),
-        minute: part('minute'),
-        second: part('second'),
-        zone: ICAL.TimezoneService.get(tzid) || ICAL.Timezone.utcTimezone
-      });
+    // Robust "now" in student's timezone using Luxon (for DST, edge case safety)
+    function getLuxonNowInTz(tzid) {
+      // Uses Luxon for best timezone handling (with DST)
+      return window.luxon.DateTime.now().setZone(tzid);
     }
 
-    // For 12-hour time display
-    function formatTime12(dt, tzid, includeSeconds = false) {
-      if (!dt) return "--:--";
-      return new Intl.DateTimeFormat('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        ...(includeSeconds ? {second:'2-digit'} : {}),
-        hour12: true,
-        timeZone: tzid
-      }).format(dt.toJSDate());
+    // 12-hour format function for Luxon DateTime
+    function formatLuxon12(dt, withSeconds=false) {
+      if (!dt || !dt.isValid) return "--:--";
+      return dt.toFormat(withSeconds ? "hh:mm:ss a" : "hh:mm a");
     }
-    // For displaying event date (e.g. Thu, Oct 30)
-    function formatDate(dt, tzid) {
-      if (!dt) return "--";
-      return new Intl.DateTimeFormat('en-US', {
-        weekday: 'short', month: 'short', day: 'numeric',
-        timeZone: tzid
-      }).format(dt.toJSDate());
+    function formatLuxonDate(dt) {
+      if (!dt || !dt.isValid) return "--";
+      return dt.toFormat("ccc, LLL d");
     }
+
+    // Load Luxon for best timezone support
+    const luxonScript = document.createElement("script");
+    luxonScript.src = "https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js";
+    document.head.appendChild(luxonScript);
 
     import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm").then(async ({ createClient }) => {
       const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -192,6 +172,12 @@
         statusEl.style.display = countdownEl.style.display = nextClassEl.style.display = "none";
         return;
       }
+
+      // Wait for Luxon to load
+      await new Promise(res => {
+        if (window.luxon) res();
+        else luxonScript.onload = res;
+      });
 
       // --- Download ICS file from Supabase
       statusEl.textContent = "Loading schedule…";
@@ -258,42 +244,43 @@
         tzid = "UTC";
       }
 
-      let icalTz = ICAL.TimezoneService.get(tzid) || ICAL.Timezone.utcTimezone;
-
-      // --- Build all future and ongoing events (next 7 days window, robust for all types) ---
-      function eventInstanceToObj(event, dtstart, dtend) {
-        return {
-          summary: event.summary || "",
-          location: event.location || "",
-          isAllDay: dtstart && dtstart.isDate,
-          start: dtstart,
-          end: dtend
-        };
-      }
-
-      function expandAllEvents(windowStart, windowEnd) {
+      // --- Expand events accurately in student's timezone using Luxon
+      function expandEventsLuxon(windowStart, windowEnd) {
         let events = [];
         for (const ve of vevents) {
-          if (!ve.startDate || !ve.endDate) continue; // skip malformed
-          // Recurring events
+          if (!ve.startDate || !ve.endDate) continue;
+          // Use Luxon for recurring event expansion for DST/recurrence safety
           if (ve.isRecurring()) {
-            // Expand up to 200 instances or until windowEnd
+            const rule = ve.component.getFirstPropertyValue('rrule');
+            if (!rule) continue;
+            // Build iCal RRULE string
+            const rruleStr = "RRULE:" + rule.toString();
+            const rruleObj = window.luxon.rrule ? window.luxon.rrule.rrulestr(rruleStr) : null;
+            // We'll instead use ICAL.js's iterator, but create start/end in Luxon for display
             const iterator = ve.iterator(windowStart);
             let next, count = 0;
+            const duration = ve.endDate.subtractDateTz(ve.startDate);
             while ((next = iterator.next()) && count < 200) {
-              // next is ICAL.Time in the correct timezone!
-              const start = next;
-              let end = null;
-              try {
-                if (ve.endDate) {
-                  const dur = ve.endDate.subtractDateTz(ve.startDate);
-                  end = start.clone(); end.addDuration(dur);
-                }
-              } catch (_) {}
-              if (!end) continue;
-              if (start.compare(windowEnd) > 0) break;
-              if (start.compare(windowStart) >= 0 && start.compare(windowEnd) <= 0) {
-                events.push(eventInstanceToObj(ve, start, end));
+              if (!next) break;
+              // Next is ICAL.Time, convert to Luxon in tzid
+              const lxStart = window.luxon.DateTime.fromObject({
+                year: next.year,
+                month: next.month,
+                day: next.day,
+                hour: next.hour,
+                minute: next.minute,
+                second: next.second,
+              }, { zone: tzid });
+              const lxEnd = lxStart.plus({ hours: duration.hours, minutes: duration.minutes, seconds: duration.seconds });
+              if (lxStart > windowEnd) break;
+              if (lxStart >= windowStart && lxStart <= windowEnd) {
+                events.push({
+                  summary: ve.summary || "",
+                  location: ve.location || "",
+                  isAllDay: next.isDate,
+                  start: lxStart,
+                  end: lxEnd
+                });
               }
               count++;
             }
@@ -301,22 +288,44 @@
             // Non-recurring
             const start = ve.startDate;
             const end = ve.endDate;
-            if (start.compare(windowEnd) > 0) continue;
-            if ((start.compare(windowStart) >= 0 && start.compare(windowEnd) <= 0) ||
-                (start.compare(windowStart) <= 0 && end.compare(windowStart) > 0)) {
-              events.push(eventInstanceToObj(ve, start, end));
+            const lxStart = window.luxon.DateTime.fromObject({
+              year: start.year,
+              month: start.month,
+              day: start.day,
+              hour: start.hour,
+              minute: start.minute,
+              second: start.second,
+            }, { zone: tzid });
+            const lxEnd = window.luxon.DateTime.fromObject({
+              year: end.year,
+              month: end.month,
+              day: end.day,
+              hour: end.hour,
+              minute: end.minute,
+              second: end.second,
+            }, { zone: tzid });
+            if (lxStart > windowEnd) continue;
+            if ((lxStart >= windowStart && lxStart <= windowEnd) ||
+                (lxStart <= windowStart && lxEnd > windowStart)) {
+              events.push({
+                summary: ve.summary || "",
+                location: ve.location || "",
+                isAllDay: start.isDate,
+                start: lxStart,
+                end: lxEnd
+              });
             }
           }
         }
-        // Sort by start time, remove duplicates (same summary, start, end)
-        events = events.filter(ev => ev && ev.start && ev.end);
-        events.sort((a, b) => a.start.compare(b.start) || a.end.compare(b.end));
+        // Sort and dedupe
+        events = events.filter(ev => ev && ev.start && ev.end && ev.start.isValid && ev.end.isValid);
+        events.sort((a, b) => a.start - b.start || a.end - b.end);
         events = events.filter((ev, i, arr) =>
           i === 0 ||
           !(
             ev.summary === arr[i-1].summary &&
-            ev.start.toString() === arr[i-1].start.toString() &&
-            ev.end.toString() === arr[i-1].end.toString()
+            ev.start.toISO() === arr[i-1].start.toISO() &&
+            ev.end.toISO() === arr[i-1].end.toISO()
           )
         );
         return events;
@@ -324,35 +333,33 @@
 
       // --- Main logic: always use student's timezone "now"
       function updateAll() {
-        // Always get now in student timezone (not browser, not UTC)
-        const now = getNowInTz(tzid);
-        // Expand window from now to +7 days
-        const plus7 = now.clone(); plus7.adjust(0, 0, 7, 0);
-        allEvents = expandAllEvents(now.clone().adjust(0,0,-1,0), plus7);
+        const nowLuxon = getLuxonNowInTz(tzid);
+        const windowStart = nowLuxon.minus({ days: 1 });
+        const windowEnd = nowLuxon.plus({ days: 7 });
+        allEvents = expandEventsLuxon(windowStart, windowEnd);
 
-        // Update clock (12 hour with AM/PM)
-        clockEl.textContent = formatTime12(now, tzid, true);
+        // Update clock
+        clockEl.textContent = formatLuxon12(nowLuxon, true);
 
         // Find current and next classes
         const currentClass = allEvents.find(ev =>
-          now.compare(ev.start) >= 0 &&
-          now.compare(ev.end) < 0
+          nowLuxon >= ev.start &&
+          nowLuxon < ev.end
         );
         const nextClass = allEvents.find(ev =>
-          now.compare(ev.start) < 0
+          nowLuxon < ev.start
         );
 
         // Determine whether it's night in student timezone
-        const hour = now.hour;
+        const hour = nowLuxon.hour;
         const isNight = (hour < 8 || hour >= 21);
 
-        // UI logic
         if (currentClass) {
           statusEl.textContent = currentClass.isAllDay ? "ALL-DAY CLASS" : "CLASS IN SESSION";
           statusEl.className = "status bad";
           let endTimeStr = currentClass.isAllDay
             ? "All day"
-            : formatTime12(currentClass.end, tzid) + " " + formatDate(currentClass.end, tzid);
+            : `${formatLuxon12(currentClass.end)} ${formatLuxonDate(currentClass.end)}`;
           countdownEl.textContent = `Ends at: ${endTimeStr} (${currentClass.summary})`;
           nextClassEl.style.display = "none";
         } else if (isNight) {
@@ -364,13 +371,13 @@
           statusEl.textContent = "GOOD TO CALL";
           statusEl.className = "status";
           if (nextClass) {
-            const diffMin = Math.floor((nextClass.start.toJSDate() - now.toJSDate()) / (60*1000));
-            const h = Math.floor(diffMin/60), m = diffMin%60;
+            const diff = nextClass.start.diff(nowLuxon, ['hours','minutes']).toObject();
+            const h = Math.floor(diff.hours || 0), m = Math.round(diff.minutes || 0);
             countdownEl.textContent = `Next class in ${h > 0 ? h + " hr " : ""}${m} min`;
             nextClassEl.style.display = "block";
             let timeInfo = nextClass.isAllDay
               ? "All day"
-              : `${formatDate(nextClass.start, tzid)}\n${formatTime12(nextClass.start, tzid)} → ${formatTime12(nextClass.end, tzid)}`;
+              : `${formatLuxonDate(nextClass.start)}\n${formatLuxon12(nextClass.start)} → ${formatLuxon12(nextClass.end)}`;
             nextClassEl.textContent = `${nextClass.summary || "Class"}\n${timeInfo}`;
           } else {
             countdownEl.textContent = "No more classes today!";
@@ -385,4 +392,3 @@
   </script>
 </body>
 </html>
-
