@@ -354,24 +354,25 @@
         tzid = "UTC";
       }
 
-      // Bulletproof AlturaTime event expansion & updateAll
+      // Bulletproof AlturaTime event expansion & updateAll: expand from midnight today!
       function getAllRelevantEvents(now, vevents, tzid) {
         let results = [];
+        // Start at midnight in the student's timezone (to catch all today's events)
+        const todayMidnight = now.startOf('day');
         for (const ve of vevents) {
           if (!ve.startDate || !ve.endDate) continue;
           const duration = ve.endDate.subtractDateTz(ve.startDate);
 
           if (ve.isRecurring()) {
-            // Expand window from 12 hours before now to 7 days ahead (to catch ongoing events)
-            const expandStart = now.minus({ hours: 12 });
-            const iterator = ve.iterator(ICAL.Time.fromJSDate(expandStart.toJSDate(), false));
+            // Expand window from today's midnight to 7 days ahead
+            const iterator = ve.iterator(ICAL.Time.fromJSDate(todayMidnight.toJSDate(), false));
             let next, count = 0;
             while ((next = iterator.next()) && count < 200) {
               const lxStart = icalToLuxon(next, tzid);
               const lxEnd = lxStart.plus({ hours: duration.hours, minutes: duration.minutes, seconds: duration.seconds });
-              // Only add if event is ongoing or upcoming
-              if (lxEnd < now.minus({ minutes: 1 })) continue;
-              if (lxStart > now.plus({ days: 7 })) break;
+              // Only include if event is today or upcoming
+              if (lxEnd < now.minus({ minutes: 1 })) continue; // already ended
+              if (lxStart > now.plus({ days: 7 })) break; // too far in future
               results.push({
                 summary: ve.summary || "",
                 location: ve.location || "",
@@ -394,7 +395,6 @@
             });
           }
         }
-        // Sort by start time, remove duplicates
         results = results.filter(ev => ev && ev.start && ev.end && ev.start.isValid && ev.end.isValid);
         results.sort((a, b) => a.start - b.start || a.end - b.end);
         results = results.filter((ev, i, arr) =>
