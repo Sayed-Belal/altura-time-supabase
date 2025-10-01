@@ -92,6 +92,7 @@
       color: #444;
       box-shadow: 0 2px 8px 0 #cfc6ff18;
       text-align: left;
+      white-space: pre-line;
     }
     .footer-note {
       margin-top: 2.2em;
@@ -125,9 +126,50 @@
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
   <script type="module">
     // === USER: FILL IN YOUR SUPABASE INFO ===
-    const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
+    const SUPABASE_URL = "https://YOUR-SUPABASE-URL.supabase.co";
+    const SUPABASE_ANON_KEY = "YOUR-SUPABASE-ANON-KEY";
     const SUPABASE_BUCKET = "schedules";
+
+    // Helper for robust date/time conversion in student's timezone
+    function getNowInTz(tzid) {
+      // Use DateTimeFormat to get year/month/day/hour/minute/second in tzid
+      const now = new Date();
+      const parts = new Intl.DateTimeFormat('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false, timeZone: tzid
+      }).formatToParts(now);
+      function part(type) { return parseInt(parts.find(p => p.type === type).value, 10); }
+      return new ICAL.Time({
+        year: part('year'),
+        month: part('month'),
+        day: part('day'),
+        hour: part('hour'),
+        minute: part('minute'),
+        second: part('second'),
+        zone: ICAL.TimezoneService.get(tzid) || ICAL.Timezone.utcTimezone
+      });
+    }
+
+    // For 12-hour time display
+    function formatTime12(dt, tzid, includeSeconds = false) {
+      if (!dt) return "--:--";
+      return new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        ...(includeSeconds ? {second:'2-digit'} : {}),
+        hour12: true,
+        timeZone: tzid
+      }).format(dt.toJSDate());
+    }
+    // For displaying event date (e.g. Thu, Oct 30)
+    function formatDate(dt, tzid) {
+      if (!dt) return "--";
+      return new Intl.DateTimeFormat('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric',
+        timeZone: tzid
+      }).format(dt.toJSDate());
+    }
 
     import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm").then(async ({ createClient }) => {
       const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -168,7 +210,7 @@
         return;
       }
 
-      // --- Universal Robust ICS Parsing ---
+      // --- ICS Parsing ---
       let tzid = null, vevents = [], allEvents = [];
       let comp, jcal;
       try {
@@ -182,7 +224,7 @@
         return;
       }
 
-      // Extract timezone in a robust way
+      // Extract timezone robustly
       try {
         // 1. VTIMEZONE block
         const vtimezones = comp.getAllSubcomponents("vtimezone");
@@ -216,13 +258,9 @@
         tzid = "UTC";
       }
 
-      // Defensive: always get a timezone object, fallback to UTC if unknown
       let icalTz = ICAL.TimezoneService.get(tzid) || ICAL.Timezone.utcTimezone;
 
       // --- Build all future and ongoing events (next 7 days window, robust for all types) ---
-      const now = ICAL.Time.now().convertToZone(icalTz);
-      const plus7 = now.clone(); plus7.adjust(0, 0, 7, 0);
-
       function eventInstanceToObj(event, dtstart, dtend) {
         return {
           summary: event.summary || "",
@@ -233,104 +271,91 @@
         };
       }
 
-      allEvents = [];
-      for (const ve of vevents) {
-        if (!ve.startDate || !ve.endDate) continue; // skip malformed
-        // Recurring events
-        if (ve.isRecurring()) {
-          const iterator = ve.iterator(now);
-          let next, count = 0;
-          while ((next = iterator.next()) && count < 50) {
-            // Expand in next 7 days only
-            const start = next;
-            let end = null;
-            try {
-              if (ve.endDate) {
-                // Calculate duration and add to start
-                const dur = ve.endDate.subtractDateTz(ve.startDate);
-                end = start.clone(); end.addDuration(dur);
+      function expandAllEvents(windowStart, windowEnd) {
+        let events = [];
+        for (const ve of vevents) {
+          if (!ve.startDate || !ve.endDate) continue; // skip malformed
+          // Recurring events
+          if (ve.isRecurring()) {
+            // Expand up to 200 instances or until windowEnd
+            const iterator = ve.iterator(windowStart);
+            let next, count = 0;
+            while ((next = iterator.next()) && count < 200) {
+              // next is ICAL.Time in the correct timezone!
+              const start = next;
+              let end = null;
+              try {
+                if (ve.endDate) {
+                  const dur = ve.endDate.subtractDateTz(ve.startDate);
+                  end = start.clone(); end.addDuration(dur);
+                }
+              } catch (_) {}
+              if (!end) continue;
+              if (start.compare(windowEnd) > 0) break;
+              if (start.compare(windowStart) >= 0 && start.compare(windowEnd) <= 0) {
+                events.push(eventInstanceToObj(ve, start, end));
               }
-            } catch (_) {}
-            if (!end) continue;
-            if (start.compare(now) >= 0 && start.compare(plus7) <= 0) {
-              allEvents.push(eventInstanceToObj(ve, start, end));
+              count++;
             }
-            count++;
-          }
-        } else {
-          // Non-recurring event
-          const start = ve.startDate;
-          const end = ve.endDate;
-          if (start.compare(now) >= 0 && start.compare(plus7) <= 0) {
-            allEvents.push(eventInstanceToObj(ve, start, end));
-          }
-          // If event is ongoing right now
-          if (start.compare(now) <= 0 && end.compare(now) > 0) {
-            allEvents.push(eventInstanceToObj(ve, start, end));
+          } else {
+            // Non-recurring
+            const start = ve.startDate;
+            const end = ve.endDate;
+            if (start.compare(windowEnd) > 0) continue;
+            if ((start.compare(windowStart) >= 0 && start.compare(windowEnd) <= 0) ||
+                (start.compare(windowStart) <= 0 && end.compare(windowStart) > 0)) {
+              events.push(eventInstanceToObj(ve, start, end));
+            }
           }
         }
+        // Sort by start time, remove duplicates (same summary, start, end)
+        events = events.filter(ev => ev && ev.start && ev.end);
+        events.sort((a, b) => a.start.compare(b.start) || a.end.compare(b.end));
+        events = events.filter((ev, i, arr) =>
+          i === 0 ||
+          !(
+            ev.summary === arr[i-1].summary &&
+            ev.start.toString() === arr[i-1].start.toString() &&
+            ev.end.toString() === arr[i-1].end.toString()
+          )
+        );
+        return events;
       }
 
-      // Sort by start time, remove duplicates (same summary, start, end)
-      allEvents = allEvents.filter(ev => ev && ev.start && ev.end);
-      allEvents.sort((a, b) => a.start.compare(b.start) || a.end.compare(b.end));
-      allEvents = allEvents.filter((ev, i, arr) =>
-        i === 0 ||
-        !(
-          ev.summary === arr[i-1].summary &&
-          ev.start.toString() === arr[i-1].start.toString() &&
-          ev.end.toString() === arr[i-1].end.toString()
-        )
-      );
+      // --- Main logic: always use student's timezone "now"
+      function updateAll() {
+        // Always get now in student timezone (not browser, not UTC)
+        const now = getNowInTz(tzid);
+        // Expand window from now to +7 days
+        const plus7 = now.clone(); plus7.adjust(0, 0, 7, 0);
+        allEvents = expandAllEvents(now.clone().adjust(0,0,-1,0), plus7);
 
-      // --- Helper Functions ---
-      function isNowInClass(now, events) {
-        return events.find(ev =>
+        // Update clock (12 hour with AM/PM)
+        clockEl.textContent = formatTime12(now, tzid, true);
+
+        // Find current and next classes
+        const currentClass = allEvents.find(ev =>
           now.compare(ev.start) >= 0 &&
           now.compare(ev.end) < 0
         );
-      }
-      function getNextClass(now, events) {
-        return events.find(ev =>
+        const nextClass = allEvents.find(ev =>
           now.compare(ev.start) < 0
         );
-      }
-      function isNight(now) {
+
+        // Determine whether it's night in student timezone
         const hour = now.hour;
-        return (hour < 8 || hour >= 21); // 9PM-8AM = night
-      }
+        const isNight = (hour < 8 || hour >= 21);
 
-      // --- Live clock display in student's timezone
-      function updateClock() {
-        let localeTime = "--:--:--";
-        try {
-          localeTime = new Intl.DateTimeFormat('en-US', {
-            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-            timeZone: tzid
-          }).format(new Date());
-        } catch (e) {
-          localeTime = now.toString().substr(9,8);
-        }
-        clockEl.textContent = localeTime;
-      }
-      updateClock();
-      setInterval(updateClock, 1000);
-
-      // --- Update status & countdown every 15s
-      function updateStatus() {
-        const now = ICAL.Time.now().convertToZone(icalTz);
-        const currentClass = isNowInClass(now, allEvents);
-        const nextClass = getNextClass(now, allEvents);
-
+        // UI logic
         if (currentClass) {
           statusEl.textContent = currentClass.isAllDay ? "ALL-DAY CLASS" : "CLASS IN SESSION";
           statusEl.className = "status bad";
-          let endTimeStr = currentClass.isAllDay ?
-            "All day" :
-            currentClass.end.toString().substr(9,5);
+          let endTimeStr = currentClass.isAllDay
+            ? "All day"
+            : formatTime12(currentClass.end, tzid) + " " + formatDate(currentClass.end, tzid);
           countdownEl.textContent = `Ends at: ${endTimeStr} (${currentClass.summary})`;
           nextClassEl.style.display = "none";
-        } else if (isNight(now)) {
+        } else if (isNight) {
           statusEl.textContent = "AVOID CALLING";
           statusEl.className = "status bad";
           countdownEl.textContent = "It's night time in the student's timezone.";
@@ -343,7 +368,9 @@
             const h = Math.floor(diffMin/60), m = diffMin%60;
             countdownEl.textContent = `Next class in ${h > 0 ? h + " hr " : ""}${m} min`;
             nextClassEl.style.display = "block";
-            let timeInfo = nextClass.isAllDay ? "All day" : nextClass.start.toString().substr(0,16) + " → " + nextClass.end.toString().substr(9,5);
+            let timeInfo = nextClass.isAllDay
+              ? "All day"
+              : `${formatDate(nextClass.start, tzid)}\n${formatTime12(nextClass.start, tzid)} → ${formatTime12(nextClass.end, tzid)}`;
             nextClassEl.textContent = `${nextClass.summary || "Class"}\n${timeInfo}`;
           } else {
             countdownEl.textContent = "No more classes today!";
@@ -351,8 +378,9 @@
           }
         }
       }
-      updateStatus();
-      setInterval(updateStatus, 15000);
+
+      updateAll();
+      setInterval(updateAll, 10000);
     });
   </script>
 </body>
