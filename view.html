@@ -253,6 +253,7 @@
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
     const SUPABASE_BUCKET = "schedules";
 
+    // Convert ICAL.Time to Luxon DateTime in correct zone
     function icalToLuxon(dt, fallbackTz) {
       if (!dt) return null;
       let zone = (dt.zone && dt.zone.tzid) ? dt.zone.tzid : fallbackTz;
@@ -265,7 +266,6 @@
         second: dt.isDate ? 0 : dt.second,
       }, { zone });
     }
-
     function formatTime12(dt, withSeconds=false) {
       if (!dt || !dt.isValid) return "--:--";
       return dt.toFormat(withSeconds ? "hh:mm:ss a" : "hh:mm a");
@@ -354,50 +354,50 @@
         tzid = "UTC";
       }
 
-      function expandAllEvents(windowStart, windowEnd) {
-        let events = [];
+      // Bulletproof AlturaTime event expansion & updateAll
+      function getAllRelevantEvents(now, vevents, tzid) {
+        let results = [];
         for (const ve of vevents) {
           if (!ve.startDate || !ve.endDate) continue;
+          const duration = ve.endDate.subtractDateTz(ve.startDate);
+
           if (ve.isRecurring()) {
-            const iterator = ve.iterator(ICAL.Time.fromJSDate(windowStart.toJSDate(), false));
+            // Expand window from 12 hours before now to 7 days ahead (to catch ongoing events)
+            const expandStart = now.minus({ hours: 12 });
+            const iterator = ve.iterator(ICAL.Time.fromJSDate(expandStart.toJSDate(), false));
             let next, count = 0;
-            const duration = ve.endDate.subtractDateTz(ve.startDate);
             while ((next = iterator.next()) && count < 200) {
-              if (!next) break;
               const lxStart = icalToLuxon(next, tzid);
               const lxEnd = lxStart.plus({ hours: duration.hours, minutes: duration.minutes, seconds: duration.seconds });
-              if (lxStart > windowEnd) break;
-              if (lxStart >= windowStart && lxStart <= windowEnd) {
-                events.push({
-                  summary: ve.summary || "",
-                  location: ve.location || "",
-                  isAllDay: next.isDate,
-                  start: lxStart,
-                  end: lxEnd
-                });
-              }
+              // Only add if event is ongoing or upcoming
+              if (lxEnd < now.minus({ minutes: 1 })) continue;
+              if (lxStart > now.plus({ days: 7 })) break;
+              results.push({
+                summary: ve.summary || "",
+                location: ve.location || "",
+                isAllDay: next.isDate,
+                start: lxStart,
+                end: lxEnd
+              });
               count++;
             }
           } else {
             const lxStart = icalToLuxon(ve.startDate, tzid);
             const lxEnd = icalToLuxon(ve.endDate, tzid);
-            if (!lxStart.isValid || !lxEnd.isValid) continue;
-            if (lxStart > windowEnd) continue;
-            if ((lxStart >= windowStart && lxStart <= windowEnd) ||
-                (lxStart <= windowStart && lxEnd > windowStart)) {
-              events.push({
-                summary: ve.summary || "",
-                location: ve.location || "",
-                isAllDay: ve.startDate.isDate,
-                start: lxStart,
-                end: lxEnd
-              });
-            }
+            if (lxEnd < now.minus({ minutes: 1 })) continue;
+            results.push({
+              summary: ve.summary || "",
+              location: ve.location || "",
+              isAllDay: ve.startDate.isDate,
+              start: lxStart,
+              end: lxEnd
+            });
           }
         }
-        events = events.filter(ev => ev && ev.start && ev.end && ev.start.isValid && ev.end.isValid);
-        events.sort((a, b) => a.start - b.start || a.end - b.end);
-        events = events.filter((ev, i, arr) =>
+        // Sort by start time, remove duplicates
+        results = results.filter(ev => ev && ev.start && ev.end && ev.start.isValid && ev.end.isValid);
+        results.sort((a, b) => a.start - b.start || a.end - b.end);
+        results = results.filter((ev, i, arr) =>
           i === 0 ||
           !(
             ev.summary === arr[i-1].summary &&
@@ -405,20 +405,19 @@
             ev.end.toISO() === arr[i-1].end.toISO()
           )
         );
-        return events;
+        return results;
       }
 
       function updateAll() {
         const nowLuxon = window.luxon.DateTime.now().setZone(tzid);
-        const windowStart = nowLuxon.minus({ days: 1 });
-        const windowEnd = nowLuxon.plus({ days: 7 });
-        const allEvents = expandAllEvents(windowStart, windowEnd);
+        const allEvents = getAllRelevantEvents(nowLuxon, vevents, tzid);
 
+        // Update clock
         clockEl.textContent = formatTime12(nowLuxon, true);
 
+        // Find current and next classes
         const currentClass = allEvents.find(ev =>
-          nowLuxon >= ev.start &&
-          nowLuxon < ev.end
+          nowLuxon >= ev.start && nowLuxon < ev.end
         );
         const nextClass = allEvents.find(ev =>
           nowLuxon < ev.start
@@ -465,4 +464,3 @@
   </script>
 </body>
 </html>
-
