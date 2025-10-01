@@ -168,8 +168,9 @@
         return;
       }
 
-      // --- Parse ICS (ICAL.js)
-      let jcal, comp, vevents = [];
+      // --- Universal Robust ICS Parsing ---
+      let tzid = null, vevents = [], allEvents = [];
+      let comp, jcal;
       try {
         jcal = ICAL.parse(icsText);
         comp = new ICAL.Component(jcal);
@@ -181,93 +182,126 @@
         return;
       }
 
-      // --- Determine Timezone
-      let tzid = null;
-      for (const vtz of comp.getAllSubcomponents("vtimezone")) {
-        tzid = vtz.getFirstPropertyValue("tzid");
-        if (tzid) break;
+      // Extract timezone in a robust way
+      try {
+        // 1. VTIMEZONE block
+        const vtimezones = comp.getAllSubcomponents("vtimezone");
+        if (vtimezones.length > 0) {
+          tzid = vtimezones[0].getFirstPropertyValue("tzid");
+        }
+        // 2. DTSTART zone
+        if (!tzid && vevents.length) {
+          const dt = vevents[0].startDate;
+          if (dt) {
+            if (dt.zone && typeof dt.zone.tzid === "string") {
+              tzid = dt.zone.tzid;
+            } else if (typeof dt.zoneId === "string") {
+              tzid = dt.zoneId;
+            }
+          }
+        }
+        // 3. X-WR-TIMEZONE
+        if (!tzid) {
+          const props = comp.getAllProperties();
+          for (const p of props) {
+            if (p.name === "X-WR-TIMEZONE") {
+              tzid = p.getFirstValue();
+              break;
+            }
+          }
+        }
+        // 4. Fallback
+        if (!tzid) tzid = "UTC";
+      } catch (e) {
+        tzid = "UTC";
       }
-      // Fallback: from any event DTSTART
-      if (!tzid && vevents.length) {
-  const dt = vevents[0].startDate;
-  if (dt && dt.zone && typeof dt.zone.tzid === "string") {
-    tzid = dt.zone.tzid;
-  } else if (dt && typeof dt.zoneId === "string") {
-    tzid = dt.zoneId;
-  }
-}
-if (!tzid) tzid = "UTC";
 
-      // --- Build array of all future class events (including recurring), with correct TZ
-      let events = [];
-      const now = ICAL.Time.now().convertToZone(ICAL.TimezoneService.get(tzid) || ICAL.Timezone.utcTimezone);
-      const in7days = now.clone(); in7days.adjust(0, 0, 7, 0);
+      // Defensive: always get a timezone object, fallback to UTC if unknown
+      let icalTz = ICAL.TimezoneService.get(tzid) || ICAL.Timezone.utcTimezone;
 
+      // --- Build all future and ongoing events (next 7 days window, robust for all types) ---
+      const now = ICAL.Time.now().convertToZone(icalTz);
+      const plus7 = now.clone(); plus7.adjust(0, 0, 7, 0);
+
+      function eventInstanceToObj(event, dtstart, dtend) {
+        return {
+          summary: event.summary || "",
+          location: event.location || "",
+          isAllDay: dtstart && dtstart.isDate,
+          start: dtstart,
+          end: dtend
+        };
+      }
+
+      allEvents = [];
       for (const ve of vevents) {
-        // Expand recurring events for next 7 days
+        if (!ve.startDate || !ve.endDate) continue; // skip malformed
+        // Recurring events
         if (ve.isRecurring()) {
-          const expand = ve.iterator(now);
-          let next;
-          let count = 0;
-          while ((next = expand.next()) && count < 40) {
-            const eventStart = next.clone();
-            // Only show future events
-            if (eventStart.compare(now) >= 0 && eventStart.compare(in7days) <= 0) {
-              events.push({
-                summary: ve.summary,
-                start: eventStart,
-                end: ICAL.Time.fromJSDate(ve.endDate.toJSDate(), false).convertToZone(eventStart.zone),
-              });
+          const iterator = ve.iterator(now);
+          let next, count = 0;
+          while ((next = iterator.next()) && count < 50) {
+            // Expand in next 7 days only
+            const start = next;
+            let end = null;
+            try {
+              if (ve.endDate) {
+                // Calculate duration and add to start
+                const dur = ve.endDate.subtractDateTz(ve.startDate);
+                end = start.clone(); end.addDuration(dur);
+              }
+            } catch (_) {}
+            if (!end) continue;
+            if (start.compare(now) >= 0 && start.compare(plus7) <= 0) {
+              allEvents.push(eventInstanceToObj(ve, start, end));
             }
             count++;
           }
         } else {
-          const eventStart = ve.startDate.convertToZone(ICAL.TimezoneService.get(tzid));
-          if (eventStart.compare(now) >= 0 && eventStart.compare(in7days) <= 0) {
-            events.push({
-              summary: ve.summary,
-              start: eventStart,
-              end: ve.endDate.convertToZone(ICAL.TimezoneService.get(tzid)),
-            });
+          // Non-recurring event
+          const start = ve.startDate;
+          const end = ve.endDate;
+          if (start.compare(now) >= 0 && start.compare(plus7) <= 0) {
+            allEvents.push(eventInstanceToObj(ve, start, end));
+          }
+          // If event is ongoing right now
+          if (start.compare(now) <= 0 && end.compare(now) > 0) {
+            allEvents.push(eventInstanceToObj(ve, start, end));
           }
         }
       }
-      // Also add ongoing events (might have started in the past, still going)
-      for (const ve of vevents) {
-        const eventStart = ve.startDate.convertToZone(ICAL.TimezoneService.get(tzid));
-        const eventEnd = ve.endDate.convertToZone(ICAL.TimezoneService.get(tzid));
-        if (eventStart.compare(now) <= 0 && eventEnd.compare(now) > 0) {
-          events.push({
-            summary: ve.summary,
-            start: eventStart,
-            end: eventEnd,
-          });
-        }
-      }
 
-      // --- Sort by start time
-      events.sort((a, b) => a.start.compare(b.start));
+      // Sort by start time, remove duplicates (same summary, start, end)
+      allEvents = allEvents.filter(ev => ev && ev.start && ev.end);
+      allEvents.sort((a, b) => a.start.compare(b.start) || a.end.compare(b.end));
+      allEvents = allEvents.filter((ev, i, arr) =>
+        i === 0 ||
+        !(
+          ev.summary === arr[i-1].summary &&
+          ev.start.toString() === arr[i-1].start.toString() &&
+          ev.end.toString() === arr[i-1].end.toString()
+        )
+      );
 
-      // --- Helper: return if now is in class
-      function isInClass(now, events) {
-        return events.find(ev => now.compare(ev.start) >= 0 && now.compare(ev.end) < 0);
+      // --- Helper Functions ---
+      function isNowInClass(now, events) {
+        return events.find(ev =>
+          now.compare(ev.start) >= 0 &&
+          now.compare(ev.end) < 0
+        );
       }
-      // --- Helper: get next class event
       function getNextClass(now, events) {
-        return events.find(ev => now.compare(ev.start) < 0);
+        return events.find(ev =>
+          now.compare(ev.start) < 0
+        );
       }
-
-      // --- Helper: is now night?
       function isNight(now) {
         const hour = now.hour;
-        return (hour < 8 || hour >= 21); // 9PM-8AM considered "night"
+        return (hour < 8 || hour >= 21); // 9PM-8AM = night
       }
 
       // --- Live clock display in student's timezone
       function updateClock() {
-        const nowjs = new Date();
-        const utc = nowjs.getTime() + nowjs.getTimezoneOffset() * 60000;
-        // Guess offset for tzid using DateTimeFormat, fallback to UTC
         let localeTime = "--:--:--";
         try {
           localeTime = new Intl.DateTimeFormat('en-US', {
@@ -275,7 +309,7 @@ if (!tzid) tzid = "UTC";
             timeZone: tzid
           }).format(new Date());
         } catch (e) {
-          localeTime = new Date(utc).toISOString().substr(11, 8);
+          localeTime = now.toString().substr(9,8);
         }
         clockEl.textContent = localeTime;
       }
@@ -284,16 +318,17 @@ if (!tzid) tzid = "UTC";
 
       // --- Update status & countdown every 15s
       function updateStatus() {
-        // Get "now" in class timezone
-        const now = ICAL.Time.now().convertToZone(ICAL.TimezoneService.get(tzid) || ICAL.Timezone.utcTimezone);
-
-        const currentClass = isInClass(now, events);
-        const nextClass = getNextClass(now, events);
+        const now = ICAL.Time.now().convertToZone(icalTz);
+        const currentClass = isNowInClass(now, allEvents);
+        const nextClass = getNextClass(now, allEvents);
 
         if (currentClass) {
-          statusEl.textContent = "CLASS IN SESSION";
+          statusEl.textContent = currentClass.isAllDay ? "ALL-DAY CLASS" : "CLASS IN SESSION";
           statusEl.className = "status bad";
-          countdownEl.textContent = "Ends at: " + currentClass.end.toString().substr(9, 5) + ` (${currentClass.summary})`;
+          let endTimeStr = currentClass.isAllDay ?
+            "All day" :
+            currentClass.end.toString().substr(9,5);
+          countdownEl.textContent = `Ends at: ${endTimeStr} (${currentClass.summary})`;
           nextClassEl.style.display = "none";
         } else if (isNight(now)) {
           statusEl.textContent = "AVOID CALLING";
@@ -304,12 +339,12 @@ if (!tzid) tzid = "UTC";
           statusEl.textContent = "GOOD TO CALL";
           statusEl.className = "status";
           if (nextClass) {
-            // Countdown to next class
             const diffMin = Math.floor((nextClass.start.toJSDate() - now.toJSDate()) / (60*1000));
             const h = Math.floor(diffMin/60), m = diffMin%60;
             countdownEl.textContent = `Next class in ${h > 0 ? h + " hr " : ""}${m} min`;
             nextClassEl.style.display = "block";
-            nextClassEl.textContent = `${nextClass.summary || "Class"}\n${nextClass.start.toString().substr(0,16)} → ${nextClass.end.toString().substr(9,5)}`;
+            let timeInfo = nextClass.isAllDay ? "All day" : nextClass.start.toString().substr(0,16) + " → " + nextClass.end.toString().substr(9,5);
+            nextClassEl.textContent = `${nextClass.summary || "Class"}\n${timeInfo}`;
           } else {
             countdownEl.textContent = "No more classes today!";
             nextClassEl.style.display = "none";
@@ -322,4 +357,3 @@ if (!tzid) tzid = "UTC";
   </script>
 </body>
 </html>
-
