@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>AlturaTime – Is It Good to Call?</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&family=Material+Icons&display=swap" rel="stylesheet">
   <style>
     :root {
       --primary: #6c47ff;
@@ -16,33 +16,58 @@
       --border: #ececec;
       --success: #3fc380;
       --danger: #ff5a6e;
-      --shadow: 0 2px 24px 0 rgba(108,71,255,.15);
+      --shadow: 0 4px 32px 0 rgba(108,71,255,.11), 0 1.5px 4px 0 #0002;
+      --shadow-card: 0 2px 16px 0 #b8bbff1a;
+      --gradient: linear-gradient(120deg, #6c47ff 0%, #00ffb8 120%);
     }
     body {
       font-family: 'Inter', Arial, sans-serif;
-      background: linear-gradient(120deg, var(--primary) 0%, var(--accent) 100%);
+      background: var(--bg);
       min-height: 100vh;
       margin: 0;
       color: var(--text);
+    }
+    header {
+      background: var(--gradient);
+      color: #fff;
+      padding: 0.7em 0 0.7em 0;
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 0;
+      z-index: 10;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    .main-card {
+    .logo {
+      font-weight: 700;
+      font-size: 1.5em;
+      margin-left: 2vw;
+      letter-spacing: -1.6px;
+      display: flex;
+      align-items: center;
+    }
+    .logo .material-icons { font-size: 1.2em; margin-right: 0.4em;}
+    main {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 2em;
+      padding: 2.5em 1vw 2.5em 1vw;
+    }
+    .card {
       background: var(--card);
-      border-radius: 22px;
-      box-shadow: var(--shadow);
-      padding: 2.5rem 2rem 2rem 2rem;
-      max-width: 430px;
+      border-radius: 18px;
+      box-shadow: var(--shadow-card);
+      padding: 2.5em 2em 2em 2em;
+      min-width: 340px;
+      max-width: 460px;
       width: 98vw;
-      text-align: center;
-      margin: 2rem 0;
-      animation: appear 0.8s cubic-bezier(.17,.67,.83,.67);
+      margin-bottom: 2em;
+      transition: box-shadow 0.16s;
+      position: relative;
     }
-    @keyframes appear {
-      0% { transform: scale(0.97) translateY(44px); opacity: 0;}
-      100% { transform: scale(1) translateY(0); opacity: 1;}
-    }
+    .card:hover { box-shadow: 0 8px 24px 0 #a0a0ff11; }
     h1 {
       font-size: 2.1rem;
       font-weight: 700;
@@ -50,7 +75,7 @@
       color: var(--primary);
     }
     .subinfo {
-      font-size: 1em;
+      font-size: 1.04em;
       color: #555;
       background: #f8f8fc;
       border-radius: 8px;
@@ -78,13 +103,13 @@
       margin: 1em 0 0.5em 0;
       color: #fff;
       background: var(--success);
-      box-shadow: 0 1px 12px 0 #3fc38029;
+      box-shadow: 0 1.5px 12px 0 #3fc38029;
       transition: background 0.2s;
       letter-spacing: 1px;
     }
     .status.bad {
       background: var(--danger);
-      box-shadow: 0 1px 12px 0 #ff5a6e22;
+      box-shadow: 0 1.5px 12px 0 #ff5a6e22;
     }
     .countdown {
       font-size: 1.15em;
@@ -106,6 +131,47 @@
       text-align: left;
       white-space: pre-line;
     }
+    .usecase-section {
+      margin-top: 2em;
+      margin-bottom: 2.1em;
+    }
+    .usecase-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.1em;
+      justify-content: flex-start;
+      margin-top: 0.7em;
+    }
+    .usecase-card {
+      flex: 1 1 165px;
+      min-width: 130px;
+      max-width: 210px;
+      background: #eef5ff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px 0 #00ffb808;
+      padding: 0.85em 0.9em 0.6em 0.9em;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      margin-bottom: 0.4em;
+      font-size: 0.97em;
+    }
+    .usecase-card .material-icons {
+      font-size: 1.6em;
+      color: var(--primary);
+      margin-bottom: 0.16em;
+    }
+    .usecase-card b {
+      font-size: 1.05em;
+      color: #2a2a44;
+      margin-bottom: 0.1em;
+      font-weight: 700;
+    }
+    .usecase-card span {
+      font-size: 0.97em;
+      color: #444;
+      margin-top: 0.2em;
+    }
     .footer-note {
       margin-top: 2.2em;
       font-size: 0.97em;
@@ -117,40 +183,76 @@
       font-weight: 700;
       font-size: 1.2em;
     }
-    @media (max-width: 500px) {
-      .main-card { padding: 1.25rem 0.3rem 1.1rem 0.3rem; }
-      .clock { font-size: 2em; }
-      h1 { font-size: 1.3em; }
+    @media (max-width: 1000px) {
+      main { flex-direction: column; gap: 1.7em; align-items: stretch;}
+      .card { margin: 0 auto 1.4em auto;}
+    }
+    @media (max-width: 600px) {
+      header { flex-direction: column; gap: 0.4em; padding: 0.7em 0 0.5em 0;}
+      main { padding: 1.2em 0.5vw 1.2em 0.5vw;}
+      .logo { font-size: 1.09em;}
+      .card { padding: 1.5em 0.7em 1.2em 0.7em; min-width: unset;}
+      .usecase-list { gap: 0.7em;}
+      .usecase-card { min-width: 110px; max-width: 100%;}
     }
   </style>
 </head>
 <body>
-  <div class="main-card">
-    <h1 id="studentName">Student</h1>
-    <div class="subinfo">
-      <b>What is this page?</b><br>
-      This is the smart, always-accurate live link created by <b>AlturaTime</b>. Here you see the student's name, their live clock in their local timezone, and—at a glance—whether it's a good time to call.<br><br>
-      <b>How does it work?</b><br>
-      The schedule is displayed exactly as the student uploaded, including all classes, recurrences, and timezones. This works globally—whether you're a parent in Dubai, a friend in Berlin, or a sibling in Brazil.<br><br>
-      <b>Never interrupt class again. Always know if it's a good time to call!</b>
-    </div>
-    <div class="clock" id="studentClock">--:--:--</div>
-    <div id="status" class="status">Checking…</div>
-    <div class="countdown" id="countdown">Loading next class info…</div>
-    <div class="nextclass" id="nextClass" style="display:none;"></div>
-    <div class="footer-note">All times shown in the student’s local timezone.<br>Powered by AlturaTime for families worldwide.</div>
-    <div class="error" id="error" style="display:none;"></div>
-  </div>
-  <!-- ical.js for ICS parsing -->
+  <header>
+    <span class="logo"><span class="material-icons">schedule</span>AlturaTime Viewer</span>
+  </header>
+  <main>
+    <section class="card" style="flex:2.2;">
+      <h1 id="studentName">Student</h1>
+      <div class="subinfo">
+        <b>What is this page?</b><br>
+        This is a live AlturaTime link for students and families. Instantly see the student's current time, their class status, and when it's best to call.<br><br>
+        <b>How does it work?</b><br>
+        This page updates in real time, so wherever you are, you always see the student's schedule in their local timezone. No more confusion, missed calls, or accidental interruptions.
+      </div>
+      <div class="clock" id="studentClock">--:--:--</div>
+      <div id="status" class="status">Checking…</div>
+      <div class="countdown" id="countdown">Loading next class info…</div>
+      <div class="nextclass" id="nextClass" style="display:none;"></div>
+      <div class="usecase-section">
+        <h2 style="font-size:1.17em;color:var(--primary);margin-bottom:0.7em;margin-top:0.8em;"><span class="material-icons" style="font-size:1.1em;vertical-align:bottom;">public</span> Use Cases</h2>
+        <div class="usecase-list">
+          <div class="usecase-card"><span class="material-icons">family_restroom</span>
+            <b>For Parents</b>
+            <span>Effortlessly check if it’s a good time to call your child at college, even across timezones.</span>
+          </div>
+          <div class="usecase-card"><span class="material-icons">school</span>
+            <b>For Students</b>
+            <span>Share with friends/family to avoid class-time pings and coordinate group calls.</span>
+          </div>
+          <div class="usecase-card"><span class="material-icons">groups</span>
+            <b>Study Groups</b>
+            <span>Find times when everyone is out of class and available for a meet-up.</span>
+          </div>
+          <div class="usecase-card"><span class="material-icons">flight</span>
+            <b>International Families</b>
+            <span>Bridge the time difference; never miss the right window to connect.</span>
+          </div>
+          <div class="usecase-card"><span class="material-icons">support_agent</span>
+            <b>Advisors</b>
+            <span>Schedule check-ins and support calls at times that work for your students.</span>
+          </div>
+        </div>
+      </div>
+      <div class="footer-note">
+        All times shown in the student’s local timezone.<br>
+        AlturaTime connects families, friends, and study groups globally.
+      </div>
+      <div class="error" id="error" style="display:none;"></div>
+    </section>
+  </main>
   <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-  <!-- luxon for all time math and display -->
   <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
   <script type="module">
     const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
     const SUPABASE_BUCKET = "schedules";
 
-    // Helper: Convert ICAL.Time to Luxon DateTime in correct zone
     function icalToLuxon(dt, fallbackTz) {
       if (!dt) return null;
       let zone = (dt.zone && dt.zone.tzid) ? dt.zone.tzid : fallbackTz;
@@ -176,7 +278,6 @@
     import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm").then(async ({ createClient }) => {
       const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-      // --- UI Elements
       const urlParams = new URLSearchParams(window.location.search);
       const studentName = urlParams.get('name') || "Student";
       const icsId = urlParams.get('id');
@@ -195,7 +296,6 @@
         return;
       }
 
-      // --- Download ICS file from Supabase
       statusEl.textContent = "Loading schedule…";
       let icsText;
       try {
@@ -212,7 +312,6 @@
         return;
       }
 
-      // --- ICS Parsing ---
       let tzid = null, vevents = [];
       let comp, jcal;
       try {
@@ -226,14 +325,11 @@
         return;
       }
 
-      // Extract timezone robustly
       try {
-        // 1. VTIMEZONE block
         const vtimezones = comp.getAllSubcomponents("vtimezone");
         if (vtimezones.length > 0) {
           tzid = vtimezones[0].getFirstPropertyValue("tzid");
         }
-        // 2. DTSTART zone
         if (!tzid && vevents.length) {
           const dt = vevents[0].startDate;
           if (dt) {
@@ -244,7 +340,6 @@
             }
           }
         }
-        // 3. X-WR-TIMEZONE
         if (!tzid) {
           const props = comp.getAllProperties();
           for (const p of props) {
@@ -254,13 +349,11 @@
             }
           }
         }
-        // 4. Fallback
         if (!tzid) tzid = "UTC";
       } catch (e) {
         tzid = "UTC";
       }
 
-      // Expand events into Luxon for the next 7 days
       function expandAllEvents(windowStart, windowEnd) {
         let events = [];
         for (const ve of vevents) {
@@ -302,7 +395,6 @@
             }
           }
         }
-        // Sort and dedupe
         events = events.filter(ev => ev && ev.start && ev.end && ev.start.isValid && ev.end.isValid);
         events.sort((a, b) => a.start - b.start || a.end - b.end);
         events = events.filter((ev, i, arr) =>
@@ -322,10 +414,8 @@
         const windowEnd = nowLuxon.plus({ days: 7 });
         const allEvents = expandAllEvents(windowStart, windowEnd);
 
-        // Update clock
         clockEl.textContent = formatTime12(nowLuxon, true);
 
-        // Find current and next classes
         const currentClass = allEvents.find(ev =>
           nowLuxon >= ev.start &&
           nowLuxon < ev.end
@@ -334,7 +424,6 @@
           nowLuxon < ev.start
         );
 
-        // Determine whether it's night in student timezone
         const hour = nowLuxon.hour;
         const isNight = (hour < 8 || hour >= 21);
 
