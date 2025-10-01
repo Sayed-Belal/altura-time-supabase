@@ -189,10 +189,14 @@
       }
       // Fallback: from any event DTSTART
       if (!tzid && vevents.length) {
-        const dt = vevents[0].startDate;
-        tzid = dt.zone.tzid || dt.zoneId || null;
-      }
-      if (!tzid) tzid = "UTC";
+  const dt = vevents[0].startDate;
+  if (dt && dt.zone && typeof dt.zone.tzid === "string") {
+    tzid = dt.zone.tzid;
+  } else if (dt && typeof dt.zoneId === "string") {
+    tzid = dt.zoneId;
+  }
+}
+if (!tzid) tzid = "UTC";
 
       // --- Build array of all future class events (including recurring), with correct TZ
       let events = [];
@@ -318,3 +322,4 @@
   </script>
 </body>
 </html>
+
