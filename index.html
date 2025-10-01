@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AlturaTime – Share Your Class Schedule Globally</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap" rel="stylesheet">
+  <title>AlturaTime – Smart Global Student Scheduler</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&family=Material+Icons&display=swap" rel="stylesheet">
   <style>
     :root {
       --primary: #6c47ff;
@@ -13,67 +13,87 @@
       --bg: #f4f8fb;
       --card: #fff;
       --text: #222;
+      --muted: #66688f;
       --border: #ececec;
-      --success: #3fc380;
-      --danger: #ff5a6e;
-      --shadow: 0 2px 24px 0 rgba(108,71,255,.15);
+      --shadow: 0 4px 32px 0 rgba(108,71,255,.11), 0 1.5px 4px 0 #0002;
+      --shadow-card: 0 2px 16px 0 #b8bbff1a;
+      --gradient: linear-gradient(120deg, #6c47ff 0%, #00ffb8 120%);
     }
     body {
       font-family: 'Inter', Arial, sans-serif;
-      background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
-      min-height: 100vh;
       margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
       color: var(--text);
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
     }
-    .main-card {
-      background: var(--card);
-      border-radius: 20px;
+    header {
+      background: var(--gradient);
+      color: #fff;
+      padding: 0.7em 0 0.7em 0;
       box-shadow: var(--shadow);
-      padding: 2.5rem 2rem 2rem 2rem;
-      max-width: 600px;
-      width: 98vw;
-      text-align: center;
-      margin: 2rem 0;
-      animation: appear 0.8s cubic-bezier(.17,.67,.83,.67);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
-    @keyframes appear {
-      0% { transform: scale(0.95) translateY(30px); opacity: 0;}
-      100% { transform: scale(1) translateY(0); opacity: 1;}
-    }
-    h1 {
-      font-size: 2.1rem;
+    .logo {
       font-weight: 700;
-      margin-bottom: 0.2em;
+      font-size: 1.5em;
+      margin-left: 2vw;
+      letter-spacing: -1.6px;
+      display: flex;
+      align-items: center;
+    }
+    .logo .material-icons { font-size: 1.2em; margin-right: 0.4em;}
+    nav {
+      margin-right: 2vw;
+      font-size: 1.15em;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+    }
+    nav a {
+      color: #fff;
+      text-decoration: none;
+      margin-left: 1.4em;
+      opacity: 0.88;
+      transition: opacity 0.18s;
+    }
+    nav a:hover { opacity: 1; text-decoration: underline;}
+    main {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 2.5em;
+      padding: 2.5em 1vw 2.5em 1vw;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 18px;
+      box-shadow: var(--shadow-card);
+      padding: 2.5em 2em 2em 2em;
+      min-width: 340px;
+      max-width: 440px;
+      width: 98vw;
+      margin-bottom: 2em;
+      transition: box-shadow 0.16s;
+      position: relative;
+    }
+    .card:hover { box-shadow: 0 8px 24px 0 #a0a0ff11; }
+    .card h2 {
+      margin-top: 0;
       color: var(--primary);
+      margin-bottom: 0.6em;
+      font-size: 1.35em;
+      font-weight: 700;
       letter-spacing: -1px;
+      display: flex;
+      align-items: center;
+      gap: 0.4em;
     }
-    .purpose {
-      text-align: left;
-      font-size: 1.09em;
-      color: #444;
-      margin: 0.5em 0 2em 0;
-      background:#f8f8fc;
-      border-left: 6px solid var(--primary);
-      border-radius: 7px;
-      padding: 1.1em 1.2em 1.1em 1.2em;
-      line-height: 1.7;
-      box-shadow: 0 2px 10px 0 #ece2ff11;
-    }
-    .info-section {
-      text-align: left;
-      margin-top: 2.4em;
-      padding: 1.1em 1em 1em 1.2em;
-      background: #eafbf7;
-      border-radius: 9px;
-      border-left: 5px solid var(--accent);
-      font-size: 1.01em;
-      color: #224;
-      box-shadow: 0 2px 8px 0 #00ffb808;
-    }
-    label {
+    .card .material-icons { font-size: 1.13em; vertical-align: middle;}
+    .upload-form label {
       font-size: 1em;
       font-weight: 500;
       display: block;
@@ -82,24 +102,24 @@
       text-align: left;
       color: var(--primary-dark);
     }
-    input[type="text"], input[type="file"] {
+    .upload-form input[type="text"], .upload-form input[type="file"] {
       width: 100%;
       font-size: 1.1em;
       padding: 0.75em;
       border-radius: 8px;
-      border: 1.5px solid var(--border);
+      border: 1.3px solid var(--border);
       margin-bottom: 1em;
       box-sizing: border-box;
       background: #f9f8fe;
       transition: border 0.2s;
     }
-    input[type="text"]:focus, input[type="file"]:focus {
+    .upload-form input[type="text"]:focus, .upload-form input[type="file"]:focus {
       border: 1.5px solid var(--primary);
       outline: none;
       background: #f3f1fd;
     }
     .btn {
-      background: linear-gradient(90deg, var(--primary), var(--accent));
+      background: var(--gradient);
       color: #fff;
       padding: 0.85em 2em;
       border: none;
@@ -108,8 +128,9 @@
       font-weight: 700;
       cursor: pointer;
       margin-top: 0.4em;
-      box-shadow: 0 2px 6px 0 rgba(108,71,255,.08);
+      box-shadow: 0 2px 10px 0 #6c47ff22;
       transition: background .2s, box-shadow .2s;
+      display: inline-block;
     }
     .btn:active {
       background: linear-gradient(90deg, var(--primary-dark), var(--accent));
@@ -146,65 +167,167 @@
     .share-link:active, .share-link:focus {
       box-shadow: 0 2px 18px 0 rgba(0,255,184,.10);
     }
+    .usecase-section, .info-section {
+      margin-top: 2em;
+    }
+    .usecase-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.2em;
+      justify-content: flex-start;
+      margin-top: 0.7em;
+    }
+    .usecase-card {
+      flex: 1 1 180px;
+      min-width: 155px;
+      max-width: 230px;
+      background: #f7f7ff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px 0 #00ffb808;
+      padding: 1em 1em 0.7em 1em;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      margin-bottom: 0.4em;
+    }
+    .usecase-card .material-icons {
+      font-size: 2em;
+      color: var(--primary);
+      margin-bottom: 0.3em;
+    }
+    .usecase-card b {
+      font-size: 1.08em;
+      color: #2a2a44;
+      margin-bottom: 0.1em;
+      font-weight: 700;
+    }
+    .usecase-card span {
+      font-size: 0.98em;
+      color: #444;
+      margin-top: 0.2em;
+    }
+    .info-section {
+      background: #eefdf9;
+      border-radius: 9px;
+      border-left: 5px solid var(--accent);
+      font-size: 1.01em;
+      color: #224;
+      box-shadow: 0 2px 8px 0 #00ffb808;
+      text-align: left;
+      padding: 1.1em 1em 1em 1.2em;
+      margin-bottom: 2em;
+    }
     .note {
       font-size: 0.95em;
       color: #777;
       margin-top: 2.5em;
       margin-bottom: 0;
     }
+    footer {
+      background: #1a1135;
+      color: #e6e6ff;
+      text-align: center;
+      padding: 1.3em 0 1em 0;
+      font-size: 1.01em;
+      letter-spacing: 0.2px;
+      margin-top: 2em;
+    }
+    @media (max-width: 1000px) {
+      main { flex-direction: column; gap: 1.7em; align-items: stretch;}
+      .card { margin: 0 auto 1.4em auto;}
+    }
     @media (max-width: 600px) {
-      .main-card { padding: 1.2rem 0.7rem 1.5rem 0.7rem; }
-      h1 { font-size: 1.45em; }
+      header { flex-direction: column; gap: 0.4em; padding: 0.7em 0 0.5em 0;}
+      main { padding: 1.2em 0.5vw 1.2em 0.5vw;}
+      .logo { font-size: 1.09em;}
+      .card { padding: 1.5em 0.7em 1.2em 0.7em; min-width: unset;}
+      .usecase-list { gap: 0.7em;}
+      .usecase-card { min-width: 120px; max-width: 100%;}
     }
   </style>
 </head>
 <body>
-  <div class="main-card">
-    <h1>AlturaTime: Global Smart Class Schedule Sharing</h1>
-    <div class="purpose">
-      <b>What is AlturaTime?</b><br>
-      AlturaTime is a global platform for students and families. It lets students upload their class schedules (from any university or school, worldwide) and share a smart, live link with parents, friends, and anyone. <br><br>
-      <b>Why?</b> Because families want to call, but never know if it's a good time! AlturaTime solves this: your loved ones always see your local student time, if you're in class, and when your next class starts—no matter where they are.<br><br>
-      <b>For:</b> Families with students studying far from home. Parents and friends wanting to stay close. Students who want to be less interrupted and more connected.<br><br>
-      <b>How does it work?</b><br>
-      <ul style="margin:0.7em 0 0 1.1em;padding:0;">
-        <li>Upload your class schedule <b>.ics</b> file (from Google/Apple Calendar, university portal, Outlook, etc.)</li>
-        <li>Enter your name and submit.</li>
-        <li>Get a secure, unique, shareable link.</li>
-        <li>Your family sees live status: your local time, if you're in class, and a countdown to the next class.</li>
-        <li>Works anywhere in the world. 100% timezone-accurate.</li>
-      </ul>
-      <br>
-      <b>Built for a million+ families and students worldwide. Zero setup. Zero confusion. Only connection.</b>
-    </div>
-    <form id="uploadForm" autocomplete="off">
-      <label for="studentName">Your Name</label>
-      <input type="text" id="studentName" placeholder="e.g. Belal" maxlength="32" required />
+  <header>
+    <span class="logo"><span class="material-icons">schedule</span>AlturaTime</span>
+    <nav>
+      <a href="#howitworks">How It Works</a>
+      <a href="#usecases">Use Cases</a>
+      <a href="#faq">FAQ</a>
+      <a href="view.html" target="_blank">Demo Viewer</a>
+    </nav>
+  </header>
+  <main>
+    <section class="card" style="flex:2;">
+      <h2><span class="material-icons">cloud_upload</span>Upload Your Class Schedule</h2>
+      <div style="color:#555;font-size:1.08em;line-height:1.6;margin-bottom:1.2em;">
+        <b>Welcome to AlturaTime!</b> Instantly create a global, timezone-smart, call-friendly class schedule link with just your name and an .ics calendar file.<br>
+        <span style="color:var(--primary-dark);font-weight:600;">No sign up. No app install. 100% browser-based.</span>
+      </div>
+      <form class="upload-form" id="uploadForm" autocomplete="off">
+        <label for="studentName">Your Name</label>
+        <input type="text" id="studentName" placeholder="e.g. Belal" maxlength="32" required />
 
-      <label for="icsFile">Class Schedule (.ics)</label>
-      <input type="file" id="icsFile" accept=".ics,text/calendar" required />
+        <label for="icsFile">Class Schedule (.ics)</label>
+        <input type="file" id="icsFile" accept=".ics,text/calendar" required />
 
-      <button type="submit" class="btn" id="submitBtn">Upload & Get Link</button>
-    </form>
-    <div id="loader" class="loader" style="display:none;"></div>
-    <a id="shareLink" class="share-link" style="display:none;" target="_blank"></a>
-    <p class="note">Your schedule is stored securely and only accessible via your generated link.</p>
-    <div class="info-section">
-      <b>How do I get my .ics file?</b><br>
-      - From Google Calendar: Settings &rarr; "Export", or open the event &rarr; "Export as .ics".<br>
-      - From Apple Calendar: File &rarr; Export &rarr; Export...<br>
-      - From most university portals: Look for "Download Calendar" or "Export .ics".<br>
-      - From Outlook: File &rarr; Save As &rarr; iCalendar format.<br>
-      <br>
-      <b>Is my data safe?</b><br>
-      Yes. Your schedule is securely stored and only accessible with your unique link. We do not track, sell, or share your data.<br>
-      <br>
-      <b>Need help?</b><br>
-      If your link does not work or you have trouble with your .ics file, contact your academic IT or try re-exporting your schedule.<br>
-      <br>
-      <b>AlturaTime is built for worldwide use, by students and families everywhere.</b>
-    </div>
-  </div>
+        <button type="submit" class="btn" id="submitBtn">Upload & Get Shareable Link</button>
+      </form>
+      <div id="loader" class="loader" style="display:none;"></div>
+      <a id="shareLink" class="share-link" style="display:none;" target="_blank"></a>
+      <p class="note" id="howitworks"><b>How it works:</b> Upload your .ics schedule → get a link → share with family or friends. They’ll see your live status (good to call/class/next class) in your timezone, always in real time.</p>
+      <div class="info-section">
+        <b>Where to get a .ics file?</b><br>
+        • Google Calendar: Settings → Export or Event → Export as .ics<br>
+        • Apple Calendar: File → Export → Export...<br>
+        • Outlook: File → Save As → iCalendar format<br>
+        • University/College portals: Export/Download schedule<br>
+        <br>
+        <b>Questions?</b> Check the FAQ below or try a test upload. AlturaTime is built for global reliability, handling all timezones and calendar quirks.
+      </div>
+    </section>
+    <section class="card" style="flex:1.7;">
+      <h2 id="usecases"><span class="material-icons">public</span>Use Cases</h2>
+      <div class="usecase-list">
+        <div class="usecase-card"><span class="material-icons">family_restroom</span>
+          <b>For Parents</b>
+          <span>Know exactly when your child is in class or free, no matter where you are in the world.</span>
+        </div>
+        <div class="usecase-card"><span class="material-icons">school</span>
+          <b>For Students</b>
+          <span>Prevent interruptions and make it easy for family or friends to reach out at the right time.</span>
+        </div>
+        <div class="usecase-card"><span class="material-icons">groups</span>
+          <b>Study Groups</b>
+          <span>Sync up group calls or meetings with everyone’s real class schedules.</span>
+        </div>
+        <div class="usecase-card"><span class="material-icons">flight</span>
+          <b>International Families</b>
+          <span>Handle time difference with ease—see your student’s true local schedule instantly.</span>
+        </div>
+        <div class="usecase-card"><span class="material-icons">support_agent</span>
+          <b>Academic Advisors</b>
+          <span>Coordinate check-ins and support at times that respect your students’ classes.</span>
+        </div>
+        <div class="usecase-card"><span class="material-icons">person</span>
+          <b>Friends & Siblings</b>
+          <span>Know when your friend is available for a chat, game, or catch-up.</span>
+        </div>
+      </div>
+      <div class="info-section" id="faq">
+        <b>FAQ:</b><br>
+        <ul style="margin-left:1.1em;">
+          <li><b>Does AlturaTime work worldwide?</b><br>Yes! It is timezone-accurate for any calendar file, anywhere.</li>
+          <li><b>What if my .ics file is from a different calendar app?</b><br>We support all standard .ics files from any app or school.</li>
+          <li><b>Do I need an account?</b><br>No. Just upload and share.</li>
+          <li><b>What is a shareable link?</b><br>A custom link that anyone can use to see your current status, in your timezone.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+  <footer>
+    &copy; 2025 AlturaTime &mdash; A global tool for students and families.<br>
+    <span style="font-size:0.98em;">Built for connection, not interruption.</span>
+  </footer>
   <script type="module">
     const SUPABASE_URL = "https://ombkqnafbmxwqlwfucva.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYmtxbmFmYm14d3Fsd2Z1Y3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjQ3OTksImV4cCI6MjA3MzcwMDc5OX0.S3h51nwxvAlMa4Vv0VwI3B9FrbBp9C1UCjlJHA0CsRg";
